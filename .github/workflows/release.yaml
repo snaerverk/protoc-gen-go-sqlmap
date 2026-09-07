@@ -19,8 +19,10 @@ jobs:
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - run: go install google.golang.org/protobuf/cmd/protoc-gen-go@$(go list -m -f '{{.Version}}' google.golang.org/protobuf)
-      - uses: bufbuild/buf-setup-action@v1
+      # buf-setup-action is deprecated in favor of the unified buf-action.
+      - uses: bufbuild/buf-action@v1
         with:
+          setup_only: true
           github_token: ${{ secrets.GITHUB_TOKEN }}
       - run: make install
       - run: go test ./...
@@ -29,8 +31,9 @@ jobs:
     needs: setup
     steps:
       - uses: actions/checkout@v4
-      - uses: bufbuild/buf-setup-action@v1
+      - uses: bufbuild/buf-action@v1
         with:
+          setup_only: true
           github_token: ${{ secrets.GITHUB_TOKEN }}
       - uses: bufbuild/buf-push-action@v1
         with:
@@ -49,9 +52,15 @@ jobs:
     needs: release
     steps:
       - uses: actions/checkout@v4
-      - uses: bufbuild/buf-setup-action@v1
+      # setup_only + token performs a real BSR login (unlike the deprecated
+      # buf-setup-action, which only installs the binary) — the bare
+      # `env: BUF_TOKEN` previously on the push step below authenticated
+      # fine for stable commands but not for this beta one.
+      - uses: bufbuild/buf-action@v1
         with:
+          setup_only: true
           github_token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.BUF_TOKEN }}
       # buf.plugin.yaml pins the runtime module the generated code imports.
       # Publishing it out of step with the tag would ship a plugin whose
       # generated SDKs require a module version that does not exist.
@@ -66,10 +75,12 @@ jobs:
             echo "::error::buf.plugin.yaml does not pin the runtime module at $GITHUB_REF_NAME"
             exit 1
           fi
+      # `buf beta registry plugin push` only accepts an already-built local
+      # Docker image via --image; it does not build the Dockerfile itself.
+      - name: Build the plugin image
+        run: docker build --platform linux/amd64 -t buf.build/snaerverk/go-sqlmap:$GITHUB_REF_NAME .
       - name: Push the remote plugin
-        run: buf beta registry plugin push --visibility=public
-        env:
-          BUF_TOKEN: ${{ secrets.BUF_TOKEN }}
+        run: buf beta registry plugin push --visibility=public --image=buf.build/snaerverk/go-sqlmap:$GITHUB_REF_NAME
   builds:
     runs-on: ["ubuntu-latest"]
     needs: release
