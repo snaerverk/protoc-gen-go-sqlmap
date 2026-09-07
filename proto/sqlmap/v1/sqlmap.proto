@@ -1,14 +1,12 @@
-syntax = "proto2";
+syntax = "proto3";
 
 package sqlmap.v1;
 
-import "schema/v1/schema.proto";
 import "google/protobuf/descriptor.proto";
-
-
+import "schema/v1/schema.proto";
 
 message Table {
-  required string name = 1;
+  string name = 1;
   repeated ForeignKeyDefinition foreign_keys = 2;
 
   // Marks this table as one arm of a supertype's oneof. Implies the foreign
@@ -29,15 +27,15 @@ message Column {
 }
 
 extend google.protobuf.MessageOptions {
-  optional Table table = 800100;
+  optional Table table = 639000;
 }
 
 extend google.protobuf.FieldOptions {
-  optional Column col = 800120;
+  optional Column col = 639020;
 }
 message ForeignKeyDefinition {
   repeated string fieldnames = 1;
-  required ForeignKey to = 2;
+  ForeignKey to = 2;
 
   optional schema.v1.OnDelete on_delete = 3;
 }
@@ -51,7 +49,7 @@ message ForeignKey {
 // docs/design/DESIGN-SUBTYPE-TABLES.md.
 message Subtypes {
   // Column added to this table recording which subtype each row is.
-  required string discriminator = 1;
+  string discriminator = 1;
 
   // Type of the discriminator column per dialect. Defaults to VARCHAR(32).
   map<string, string> type = 2;
@@ -60,7 +58,7 @@ message Subtypes {
 // SubtypeOf names the supertype a table details.
 message SubtypeOf {
   // Supertype message; its oneof must carry the `subtypes` option.
-  required string entity = 1;
+  string entity = 1;
 
   // Discriminator value for this subtype. Defaults to the oneof field's name.
   optional string value = 2;
@@ -74,5 +72,5 @@ message SubtypeOf {
 }
 
 extend google.protobuf.OneofOptions {
-  optional Subtypes subtypes = 800140;
+  optional Subtypes subtypes = 639040;
 }

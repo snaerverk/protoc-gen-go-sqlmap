@@ -25,11 +25,11 @@ const (
 
 type Table struct {
 	state       protoimpl.MessageState  `protogen:"open.v1"`
-	Name        *string                 `protobuf:"bytes,1,req,name=name" json:"name,omitempty"`
-	ForeignKeys []*ForeignKeyDefinition `protobuf:"bytes,2,rep,name=foreign_keys,json=foreignKeys" json:"foreign_keys,omitempty"`
+	Name        string                  `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	ForeignKeys []*ForeignKeyDefinition `protobuf:"bytes,2,rep,name=foreign_keys,json=foreignKeys,proto3" json:"foreign_keys,omitempty"`
 	// Marks this table as one arm of a supertype's oneof. Implies the foreign
 	// key back, so the key columns must not declare one themselves.
-	SubtypeOf     *SubtypeOf `protobuf:"bytes,3,opt,name=subtype_of,json=subtypeOf" json:"subtype_of,omitempty"`
+	SubtypeOf     *SubtypeOf `protobuf:"bytes,3,opt,name=subtype_of,json=subtypeOf,proto3,oneof" json:"subtype_of,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -65,8 +65,8 @@ func (*Table) Descriptor() ([]byte, []int) {
 }
 
 func (x *Table) GetName() string {
-	if x != nil && x.Name != nil {
-		return *x.Name
+	if x != nil {
+		return x.Name
 	}
 	return ""
 }
@@ -87,14 +87,14 @@ func (x *Table) GetSubtypeOf() *SubtypeOf {
 
 type Column struct {
 	state      protoimpl.MessageState `protogen:"open.v1"`
-	Fieldname  *string                `protobuf:"bytes,1,opt,name=fieldname" json:"fieldname,omitempty"`
-	Pk         *v1.PK                 `protobuf:"varint,2,opt,name=pk,enum=schema.v1.PK" json:"pk,omitempty"`
-	Type       map[string]string      `protobuf:"bytes,3,rep,name=type" json:"type,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	ForeignKey *ForeignKey            `protobuf:"bytes,4,opt,name=foreign_key,json=foreignKey" json:"foreign_key,omitempty"`
+	Fieldname  *string                `protobuf:"bytes,1,opt,name=fieldname,proto3,oneof" json:"fieldname,omitempty"`
+	Pk         *v1.PK                 `protobuf:"varint,2,opt,name=pk,proto3,enum=schema.v1.PK,oneof" json:"pk,omitempty"`
+	Type       map[string]string      `protobuf:"bytes,3,rep,name=type,proto3" json:"type,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	ForeignKey *ForeignKey            `protobuf:"bytes,4,opt,name=foreign_key,json=foreignKey,proto3,oneof" json:"foreign_key,omitempty"`
 	// Overrides the nullability otherwise derived from the proto field's
 	// presence. Unset means: NOT NULL for primary keys and for fields without
 	// explicit presence (a proto3 bare scalar), nullable otherwise.
-	Nullable      *bool `protobuf:"varint,5,opt,name=nullable" json:"nullable,omitempty"`
+	Nullable      *bool `protobuf:"varint,5,opt,name=nullable,proto3,oneof" json:"nullable,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -166,9 +166,9 @@ func (x *Column) GetNullable() bool {
 
 type ForeignKeyDefinition struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Fieldnames    []string               `protobuf:"bytes,1,rep,name=fieldnames" json:"fieldnames,omitempty"`
-	To            *ForeignKey            `protobuf:"bytes,2,req,name=to" json:"to,omitempty"`
-	OnDelete      *v1.OnDelete           `protobuf:"varint,3,opt,name=on_delete,json=onDelete,enum=schema.v1.OnDelete" json:"on_delete,omitempty"`
+	Fieldnames    []string               `protobuf:"bytes,1,rep,name=fieldnames,proto3" json:"fieldnames,omitempty"`
+	To            *ForeignKey            `protobuf:"bytes,2,opt,name=to,proto3" json:"to,omitempty"`
+	OnDelete      *v1.OnDelete           `protobuf:"varint,3,opt,name=on_delete,json=onDelete,proto3,enum=schema.v1.OnDelete,oneof" json:"on_delete,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -226,8 +226,8 @@ func (x *ForeignKeyDefinition) GetOnDelete() v1.OnDelete {
 
 type ForeignKey struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Entity        *string                `protobuf:"bytes,1,opt,name=entity" json:"entity,omitempty"`
-	Fieldnames    []string               `protobuf:"bytes,2,rep,name=fieldnames" json:"fieldnames,omitempty"`
+	Entity        *string                `protobuf:"bytes,1,opt,name=entity,proto3,oneof" json:"entity,omitempty"`
+	Fieldnames    []string               `protobuf:"bytes,2,rep,name=fieldnames,proto3" json:"fieldnames,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -281,9 +281,9 @@ func (x *ForeignKey) GetFieldnames() []string {
 type Subtypes struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Column added to this table recording which subtype each row is.
-	Discriminator *string `protobuf:"bytes,1,req,name=discriminator" json:"discriminator,omitempty"`
+	Discriminator string `protobuf:"bytes,1,opt,name=discriminator,proto3" json:"discriminator,omitempty"`
 	// Type of the discriminator column per dialect. Defaults to VARCHAR(32).
-	Type          map[string]string `protobuf:"bytes,2,rep,name=type" json:"type,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	Type          map[string]string `protobuf:"bytes,2,rep,name=type,proto3" json:"type,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -319,8 +319,8 @@ func (*Subtypes) Descriptor() ([]byte, []int) {
 }
 
 func (x *Subtypes) GetDiscriminator() string {
-	if x != nil && x.Discriminator != nil {
-		return *x.Discriminator
+	if x != nil {
+		return x.Discriminator
 	}
 	return ""
 }
@@ -336,14 +336,14 @@ func (x *Subtypes) GetType() map[string]string {
 type SubtypeOf struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Supertype message; its oneof must carry the `subtypes` option.
-	Entity *string `protobuf:"bytes,1,req,name=entity" json:"entity,omitempty"`
+	Entity string `protobuf:"bytes,1,opt,name=entity,proto3" json:"entity,omitempty"`
 	// Discriminator value for this subtype. Defaults to the oneof field's name.
-	Value *string `protobuf:"bytes,2,opt,name=value" json:"value,omitempty"`
+	Value *string `protobuf:"bytes,2,opt,name=value,proto3,oneof" json:"value,omitempty"`
 	// Columns on THIS table carrying the supertype's key, defaulting to its
 	// primary key. The referenced side is always the supertype's primary key,
 	// so the counts must match.
-	Fieldnames    []string     `protobuf:"bytes,3,rep,name=fieldnames" json:"fieldnames,omitempty"`
-	OnDelete      *v1.OnDelete `protobuf:"varint,4,opt,name=on_delete,json=onDelete,enum=schema.v1.OnDelete" json:"on_delete,omitempty"`
+	Fieldnames    []string     `protobuf:"bytes,3,rep,name=fieldnames,proto3" json:"fieldnames,omitempty"`
+	OnDelete      *v1.OnDelete `protobuf:"varint,4,opt,name=on_delete,json=onDelete,proto3,enum=schema.v1.OnDelete,oneof" json:"on_delete,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -379,8 +379,8 @@ func (*SubtypeOf) Descriptor() ([]byte, []int) {
 }
 
 func (x *SubtypeOf) GetEntity() string {
-	if x != nil && x.Entity != nil {
-		return *x.Entity
+	if x != nil {
+		return x.Entity
 	}
 	return ""
 }
@@ -410,44 +410,44 @@ var file_sqlmap_v1_sqlmap_proto_extTypes = []protoimpl.ExtensionInfo{
 	{
 		ExtendedType:  (*descriptorpb.MessageOptions)(nil),
 		ExtensionType: (*Table)(nil),
-		Field:         800100,
+		Field:         639000,
 		Name:          "sqlmap.v1.table",
-		Tag:           "bytes,800100,opt,name=table",
+		Tag:           "bytes,639000,opt,name=table",
 		Filename:      "sqlmap/v1/sqlmap.proto",
 	},
 	{
 		ExtendedType:  (*descriptorpb.FieldOptions)(nil),
 		ExtensionType: (*Column)(nil),
-		Field:         800120,
+		Field:         639020,
 		Name:          "sqlmap.v1.col",
-		Tag:           "bytes,800120,opt,name=col",
+		Tag:           "bytes,639020,opt,name=col",
 		Filename:      "sqlmap/v1/sqlmap.proto",
 	},
 	{
 		ExtendedType:  (*descriptorpb.OneofOptions)(nil),
 		ExtensionType: (*Subtypes)(nil),
-		Field:         800140,
+		Field:         639040,
 		Name:          "sqlmap.v1.subtypes",
-		Tag:           "bytes,800140,opt,name=subtypes",
+		Tag:           "bytes,639040,opt,name=subtypes",
 		Filename:      "sqlmap/v1/sqlmap.proto",
 	},
 }
 
 // Extension fields to descriptorpb.MessageOptions.
 var (
-	// optional sqlmap.v1.Table table = 800100;
+	// optional sqlmap.v1.Table table = 639000;
 	E_Table = &file_sqlmap_v1_sqlmap_proto_extTypes[0]
 )
 
 // Extension fields to descriptorpb.FieldOptions.
 var (
-	// optional sqlmap.v1.Column col = 800120;
+	// optional sqlmap.v1.Column col = 639020;
 	E_Col = &file_sqlmap_v1_sqlmap_proto_extTypes[1]
 )
 
 // Extension fields to descriptorpb.OneofOptions.
 var (
-	// optional sqlmap.v1.Subtypes subtypes = 800140;
+	// optional sqlmap.v1.Subtypes subtypes = 639040;
 	E_Subtypes = &file_sqlmap_v1_sqlmap_proto_extTypes[2]
 )
 
@@ -455,52 +455,64 @@ var File_sqlmap_v1_sqlmap_proto protoreflect.FileDescriptor
 
 const file_sqlmap_v1_sqlmap_proto_rawDesc = "" +
 	"\n" +
-	"\x16sqlmap/v1/sqlmap.proto\x12\tsqlmap.v1\x1a\x16schema/v1/schema.proto\x1a google/protobuf/descriptor.proto\"\x94\x01\n" +
+	"\x16sqlmap/v1/sqlmap.proto\x12\tsqlmap.v1\x1a google/protobuf/descriptor.proto\x1a\x16schema/v1/schema.proto\"\xa8\x01\n" +
 	"\x05Table\x12\x12\n" +
-	"\x04name\x18\x01 \x02(\tR\x04name\x12B\n" +
-	"\fforeign_keys\x18\x02 \x03(\v2\x1f.sqlmap.v1.ForeignKeyDefinitionR\vforeignKeys\x123\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12B\n" +
+	"\fforeign_keys\x18\x02 \x03(\v2\x1f.sqlmap.v1.ForeignKeyDefinitionR\vforeignKeys\x128\n" +
 	"\n" +
-	"subtype_of\x18\x03 \x01(\v2\x14.sqlmap.v1.SubtypeOfR\tsubtypeOf\"\x83\x02\n" +
-	"\x06Column\x12\x1c\n" +
-	"\tfieldname\x18\x01 \x01(\tR\tfieldname\x12\x1d\n" +
-	"\x02pk\x18\x02 \x01(\x0e2\r.schema.v1.PKR\x02pk\x12/\n" +
-	"\x04type\x18\x03 \x03(\v2\x1b.sqlmap.v1.Column.TypeEntryR\x04type\x126\n" +
-	"\vforeign_key\x18\x04 \x01(\v2\x15.sqlmap.v1.ForeignKeyR\n" +
-	"foreignKey\x12\x1a\n" +
-	"\bnullable\x18\x05 \x01(\bR\bnullable\x1a7\n" +
+	"subtype_of\x18\x03 \x01(\v2\x14.sqlmap.v1.SubtypeOfH\x00R\tsubtypeOf\x88\x01\x01B\r\n" +
+	"\v_subtype_of\"\xc9\x02\n" +
+	"\x06Column\x12!\n" +
+	"\tfieldname\x18\x01 \x01(\tH\x00R\tfieldname\x88\x01\x01\x12\"\n" +
+	"\x02pk\x18\x02 \x01(\x0e2\r.schema.v1.PKH\x01R\x02pk\x88\x01\x01\x12/\n" +
+	"\x04type\x18\x03 \x03(\v2\x1b.sqlmap.v1.Column.TypeEntryR\x04type\x12;\n" +
+	"\vforeign_key\x18\x04 \x01(\v2\x15.sqlmap.v1.ForeignKeyH\x02R\n" +
+	"foreignKey\x88\x01\x01\x12\x1f\n" +
+	"\bnullable\x18\x05 \x01(\bH\x03R\bnullable\x88\x01\x01\x1a7\n" +
 	"\tTypeEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x8f\x01\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\f\n" +
+	"\n" +
+	"_fieldnameB\x05\n" +
+	"\x03_pkB\x0e\n" +
+	"\f_foreign_keyB\v\n" +
+	"\t_nullable\"\xa2\x01\n" +
 	"\x14ForeignKeyDefinition\x12\x1e\n" +
 	"\n" +
 	"fieldnames\x18\x01 \x03(\tR\n" +
 	"fieldnames\x12%\n" +
-	"\x02to\x18\x02 \x02(\v2\x15.sqlmap.v1.ForeignKeyR\x02to\x120\n" +
-	"\ton_delete\x18\x03 \x01(\x0e2\x13.schema.v1.OnDeleteR\bonDelete\"D\n" +
+	"\x02to\x18\x02 \x01(\v2\x15.sqlmap.v1.ForeignKeyR\x02to\x125\n" +
+	"\ton_delete\x18\x03 \x01(\x0e2\x13.schema.v1.OnDeleteH\x00R\bonDelete\x88\x01\x01B\f\n" +
 	"\n" +
-	"ForeignKey\x12\x16\n" +
-	"\x06entity\x18\x01 \x01(\tR\x06entity\x12\x1e\n" +
+	"_on_delete\"T\n" +
+	"\n" +
+	"ForeignKey\x12\x1b\n" +
+	"\x06entity\x18\x01 \x01(\tH\x00R\x06entity\x88\x01\x01\x12\x1e\n" +
 	"\n" +
 	"fieldnames\x18\x02 \x03(\tR\n" +
-	"fieldnames\"\x9c\x01\n" +
+	"fieldnamesB\t\n" +
+	"\a_entity\"\x9c\x01\n" +
 	"\bSubtypes\x12$\n" +
-	"\rdiscriminator\x18\x01 \x02(\tR\rdiscriminator\x121\n" +
+	"\rdiscriminator\x18\x01 \x01(\tR\rdiscriminator\x121\n" +
 	"\x04type\x18\x02 \x03(\v2\x1d.sqlmap.v1.Subtypes.TypeEntryR\x04type\x1a7\n" +
 	"\tTypeEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x8b\x01\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xad\x01\n" +
 	"\tSubtypeOf\x12\x16\n" +
-	"\x06entity\x18\x01 \x02(\tR\x06entity\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value\x12\x1e\n" +
+	"\x06entity\x18\x01 \x01(\tR\x06entity\x12\x19\n" +
+	"\x05value\x18\x02 \x01(\tH\x00R\x05value\x88\x01\x01\x12\x1e\n" +
 	"\n" +
 	"fieldnames\x18\x03 \x03(\tR\n" +
-	"fieldnames\x120\n" +
-	"\ton_delete\x18\x04 \x01(\x0e2\x13.schema.v1.OnDeleteR\bonDelete:I\n" +
-	"\x05table\x12\x1f.google.protobuf.MessageOptions\x18\xe4\xea0 \x01(\v2\x10.sqlmap.v1.TableR\x05table:D\n" +
-	"\x03col\x12\x1d.google.protobuf.FieldOptions\x18\xf8\xea0 \x01(\v2\x11.sqlmap.v1.ColumnR\x03col:P\n" +
-	"\bsubtypes\x12\x1d.google.protobuf.OneofOptions\x18\x8c\xeb0 \x01(\v2\x13.sqlmap.v1.SubtypesR\bsubtypesB\xad\x01\n" +
+	"fieldnames\x125\n" +
+	"\ton_delete\x18\x04 \x01(\x0e2\x13.schema.v1.OnDeleteH\x01R\bonDelete\x88\x01\x01B\b\n" +
+	"\x06_valueB\f\n" +
+	"\n" +
+	"_on_delete:L\n" +
+	"\x05table\x12\x1f.google.protobuf.MessageOptions\x18\x98\x80' \x01(\v2\x10.sqlmap.v1.TableR\x05table\x88\x01\x01:G\n" +
+	"\x03col\x12\x1d.google.protobuf.FieldOptions\x18\xac\x80' \x01(\v2\x11.sqlmap.v1.ColumnR\x03col\x88\x01\x01:S\n" +
+	"\bsubtypes\x12\x1d.google.protobuf.OneofOptions\x18\xc0\x80' \x01(\v2\x13.sqlmap.v1.SubtypesR\bsubtypes\x88\x01\x01B\xad\x01\n" +
 	"\rcom.sqlmap.v1B\vSqlmapProtoP\x01ZJgithub.com/snaerverk/protoc-gen-go-sqlmap/pkg/generated/sqlmap/v1;sqlmapv1\xa2\x02\x03SXX\xaa\x02\tSqlmap.V1\xca\x02\tSqlmap\\V1\xe2\x02\x15Sqlmap\\V1\\GPBMetadata\xea\x02\n" +
-	"Sqlmap::V1"
+	"Sqlmap::V1b\x06proto3"
 
 var (
 	file_sqlmap_v1_sqlmap_proto_rawDescOnce sync.Once
@@ -558,6 +570,11 @@ func file_sqlmap_v1_sqlmap_proto_init() {
 	if File_sqlmap_v1_sqlmap_proto != nil {
 		return
 	}
+	file_sqlmap_v1_sqlmap_proto_msgTypes[0].OneofWrappers = []any{}
+	file_sqlmap_v1_sqlmap_proto_msgTypes[1].OneofWrappers = []any{}
+	file_sqlmap_v1_sqlmap_proto_msgTypes[2].OneofWrappers = []any{}
+	file_sqlmap_v1_sqlmap_proto_msgTypes[3].OneofWrappers = []any{}
+	file_sqlmap_v1_sqlmap_proto_msgTypes[5].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{

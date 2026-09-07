@@ -87,8 +87,8 @@ func (t *Table) GetMessageName() string {
 }
 
 func (t *Table) GetTableName() string {
-	if t.Def.Name != nil {
-		return *t.Def.Name
+	if t.Def.GetName() != "" {
+		return t.Def.GetName()
 	}
 	return t.GetMessageName()
 }
