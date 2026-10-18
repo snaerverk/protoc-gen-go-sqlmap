@@ -8,6 +8,7 @@ import (
 	"github.com/snaerverk/protoc-gen-go-sqlmap/pkg/generator/sqlmap/types"
 	"github.com/snaerverk/protoc-gen-go-sqlmap/pkg/writer"
 	"github.com/snaerverk/protoc-gen-go-sqlmap/pkg/writer/filter"
+	"github.com/snaerverk/protoc-gen-go-sqlmap/pkg/writer/page"
 	"github.com/snaerverk/protoc-gen-go-sqlmap/pkg/writer/query"
 	"github.com/snaerverk/protoc-gen-go-sqlmap/pkg/writer/scanner"
 	"github.com/snaerverk/protoc-gen-go-sqlmap/pkg/writer/schema"
@@ -33,6 +34,8 @@ var plugins = []plugin{
 	{Name: "query", New: query.New, Requires: []string{"scanner"}},
 	// Imports github.com/snaerverk/filtrify.
 	{Name: "filter", New: filter.New, OptIn: true},
+	// Query<Msg> calls Load<Msg>Rows and <Msg>Filter.
+	{Name: "page", New: page.New, OptIn: true, Requires: []string{"query", "filter"}},
 }
 
 type SqlGenerator struct {

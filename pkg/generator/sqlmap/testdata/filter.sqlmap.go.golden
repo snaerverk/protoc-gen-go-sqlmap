@@ -7,6 +7,7 @@ import (
 	filter "github.com/snaerverk/filtrify/pkg/filter"
 	sql1 "github.com/snaerverk/filtrify/pkg/filter/sql"
 	v1 "github.com/snaerverk/protoc-gen-go-sqlmap/pkg/generated/schema/v1"
+	page "github.com/snaerverk/protoc-gen-go-sqlmap/pkg/page"
 	query "github.com/snaerverk/protoc-gen-go-sqlmap/pkg/query"
 	proto "google.golang.org/protobuf/proto"
 	fieldmaskpb "google.golang.org/protobuf/types/known/fieldmaskpb"
@@ -754,3 +755,49 @@ var BadgeFilter = &sql1.Schema{
 	},
 	Sortable: []string{"member_id", "label"},
 }
+
+// QueryTeam returns one page of tbl_team rows matching req, ordered by
+// req.Order or the key, with the fields and relations mask selects (all
+// columns and no relations for an empty mask), and the total across pages.
+// Searches name TeamFilter's fields.
+func QueryTeam(ctx context.Context, c query.Conn, req page.Request, mask *fieldmaskpb.FieldMask) (*page.Result[*Team], error) {
+	res, err := page.Query(ctx, c, page.Table[*TeamResult]{
+		Name:         "tbl_team",
+		Schema:       TeamFilter,
+		DefaultOrder: sql1.KeyField,
+		Load:         LoadTeamRows,
+		Key:          func(r *TeamResult) any { return r.GetId() },
+	}, req, query.FromFieldMask(mask))
+	if err != nil {
+		return nil, err
+	}
+	out := &page.Result[*Team]{Total: res.Total, Page: res.Page}
+	for _, row := range res.Rows {
+		out.Rows = append(out.Rows, &row.Team)
+	}
+	return out, nil
+}
+
+// QueryMember returns one page of tbl_member rows matching req, ordered by
+// req.Order or the key, with the fields and relations mask selects (all
+// columns and no relations for an empty mask), and the total across pages.
+// Searches name MemberFilter's fields.
+func QueryMember(ctx context.Context, c query.Conn, req page.Request, mask *fieldmaskpb.FieldMask) (*page.Result[*Member], error) {
+	res, err := page.Query(ctx, c, page.Table[*MemberResult]{
+		Name:         "tbl_member",
+		Schema:       MemberFilter,
+		DefaultOrder: sql1.KeyField,
+		Load:         LoadMemberRows,
+		Key:          func(r *MemberResult) any { return r.GetId() },
+	}, req, query.FromFieldMask(mask))
+	if err != nil {
+		return nil, err
+	}
+	out := &page.Result[*Member]{Total: res.Total, Page: res.Page}
+	for _, row := range res.Rows {
+		out.Rows = append(out.Rows, &row.Member)
+	}
+	return out, nil
+}
+
+// No QueryBadge: pages need a single-column primary key.

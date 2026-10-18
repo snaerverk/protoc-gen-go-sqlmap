@@ -79,7 +79,11 @@ jobs:
       # Docker image via --image; it does not build the Dockerfile itself.
       - name: Build the plugin image
         run: docker build --platform linux/amd64 -t buf.build/snaerverk/go-sqlmap:$GITHUB_REF_NAME .
+      # Non-fatal: custom plugins need a BSR Pro plan ("DENIED: custom plugins
+      # are limited to Pro plan and above"), so on the free plan this step
+      # always fails. Consumers run the generator via `go tool` instead.
       - name: Push the remote plugin
+        continue-on-error: true
         run: buf beta registry plugin push --visibility=public --image=buf.build/snaerverk/go-sqlmap:$GITHUB_REF_NAME
   builds:
     runs-on: ["ubuntu-latest"]

@@ -8,7 +8,7 @@ import (
 )
 
 func TestParseEnabled(t *testing.T) {
-	defaults := map[string]bool{"schema": true, "scanner": true, "query": true, "filter": false}
+	defaults := map[string]bool{"schema": true, "scanner": true, "query": true, "filter": false, "page": false}
 
 	for _, tc := range []struct {
 		name  string
@@ -91,5 +91,18 @@ func TestGenerate_FilterIsOptIn(t *testing.T) {
 	}
 	if strings.Contains(only, "AuthorTable") || strings.Contains(only, "LoadAuthorRows") {
 		t.Error("plugins=filter emitted other plugins' code")
+	}
+}
+
+// Query<Msg> calls the query plugin's loader and the filter plugin's schema.
+func TestNew_PageRequiresQueryAndFilter(t *testing.T) {
+	for param, missing := range map[string]string{
+		"plugins=scanner+query+page": "filter",
+		"plugins=filter+page":        "query",
+	} {
+		_, err := New(protogen.Options{}, buildRequest(t, "eager.proto", param))
+		if err == nil || !strings.Contains(err.Error(), missing) {
+			t.Errorf("%s: err = %v, want one naming %q", param, err, missing)
+		}
 	}
 }
