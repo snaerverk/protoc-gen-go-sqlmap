@@ -2,12 +2,12 @@ version: v1
 name: buf.build/snaerverk/go-sqlmap
 # Keep in step with the git tag: registry.go.deps below pins the runtime
 # packages the generated code imports, and they ship from this repo.
-plugin_version: v0.1.0
+plugin_version: v0.1.1
 
 description: Generates SQL schema definitions, row scanners and FieldMask-aware queries with eager loading from sqlmap-annotated messages.
 source_url: https://github.com/snaerverk/protoc-gen-go-sqlmap
 spdx_license_id: MIT
-license_url: https://github.com/snaerverk/protoc-gen-go-sqlmap/blob/v0.1.0/LICENSE
+license_url: https://github.com/snaerverk/protoc-gen-go-sqlmap/blob/v0.1.1/LICENSE
 output_languages:
   - go
 
