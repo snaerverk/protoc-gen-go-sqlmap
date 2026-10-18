@@ -193,10 +193,10 @@ func TestGenerate_Subtype(t *testing.T) {
 	compareGolden(t, "subtype.sqlmap.go", got)
 }
 
-// Every mapping of the opt-in filter plugin, and every reason it skips a
-// field or relation.
+// Every mapping of the opt-in filter plugin, every reason it skips a field
+// or relation, and the page plugin's Query<Msg> (or why there is none).
 func TestGenerate_Filter(t *testing.T) {
-	files := generateWith(t, "filter.proto", "plugins=schema+scanner+query+filter")
+	files := generateWith(t, "filter.proto", "plugins=schema+scanner+query+filter+page")
 	got, ok := files["filter.sqlmap.go"]
 	if !ok {
 		t.Fatalf("no filter.sqlmap.go in generated output, got files: %v", fileNames(files))
