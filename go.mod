@@ -4,7 +4,7 @@ go 1.27
 
 require (
 	ariga.io/atlas v0.36.2-0.20250730182955-2c6300d0a3e1
-	github.com/snaerverk/filtrify v0.0.2-0.20261018093115-89a6b4659be6
+	github.com/snaerverk/filtrify v0.0.2-0.20261018093115-5b971a5f9fe3
 	google.golang.org/protobuf v1.36.11
 )
 

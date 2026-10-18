@@ -547,7 +547,7 @@ func TestE2E_SubtypeConstraints(t *testing.T) {
 
 // filtrifyModule is what the filter plugin's output imports. It lives in the
 // throwaway module only, never in this repo's go.mod.
-const filtrifyModule = "github.com/snaerverk/filtrify@v0.0.2-0.20261018093115-89a6b4659be6"
+const filtrifyModule = "github.com/snaerverk/filtrify@v0.0.2-0.20261018093115-5b971a5f9fe3"
 
 // TestE2E_Filter covers the filter writer: the generated schemas translate
 // filtrify expressions that sqlmap's loaders run, and page by keyset.
