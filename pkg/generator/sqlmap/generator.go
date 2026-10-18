@@ -44,6 +44,10 @@ func New(opts protogen.Options, request *pluginpb.CodeGeneratorRequest) (*SqlGen
 	if err != nil {
 		return nil, err
 	}
+	// Without this protoc/buf refuse to hand over files using proto3
+	// `optional`. Nothing else is needed: its synthetic oneofs carry no
+	// `subtypes` option, and IsNullable already follows HasPresence.
+	plug.SupportedFeatures = uint64(pluginpb.CodeGeneratorResponse_FEATURE_PROTO3_OPTIONAL)
 	gen := &SqlGenerator{
 		plugin: plug,
 		repo:   make(types.TableRepo, 0),
