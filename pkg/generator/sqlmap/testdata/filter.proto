@@ -1,0 +1,77 @@
+syntax = "proto2";
+
+package testdata;
+
+import "sqlmap/v1/sqlmap.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "testdata/filterpb";
+
+enum Level {
+  LEVEL_UNSPECIFIED = 0;
+  LEVEL_PRO = 1;
+}
+
+message Payload {
+  optional string note = 1;
+}
+
+// Every mapping the filter writer knows, and every reason it skips a field.
+message Team {
+  option (sqlmap.v1.table) = { name: "tbl_team" };
+  optional int64 id = 1 [(sqlmap.v1.col) = { fieldname: "team_id", pk: PK_AUTO }];
+  // NOT NULL, so sortable.
+  optional string name = 2 [(sqlmap.v1.col) = { fieldname: "team_name", nullable: false }];
+  // Nullable: filterable, not sortable.
+  optional string motto = 3 [(sqlmap.v1.col) = { fieldname: "motto" }];
+  optional bool active = 4 [(sqlmap.v1.col) = { fieldname: "active", nullable: false }];
+  optional google.protobuf.Timestamp founded = 5 [(sqlmap.v1.col) = { fieldname: "founded", nullable: false }];
+  // Unsigned maps to Int too; the schema writer needs its SQL type spelled out.
+  optional uint32 size = 6 [(sqlmap.v1.col) = {
+    fieldname: "size"
+    type: [{ key: "postgres", value: "BIGINT" }, { key: "mysql", value: "INT UNSIGNED" }, { key: "sqlite3", value: "INTEGER" }]
+  }];
+  // Skipped: no filtrify kind.
+  optional float score = 7 [(sqlmap.v1.col) = { fieldname: "score" }];
+  // Skipped: enums.
+  optional Level level = 8 [(sqlmap.v1.col) = {
+    fieldname: "level"
+    type: [{ key: "postgres", value: "INTEGER" }, { key: "mysql", value: "INT" }, { key: "sqlite3", value: "INTEGER" }]
+  }];
+  // Skipped: a string holding JSON.
+  optional string meta = 9 [(sqlmap.v1.col) = {
+    fieldname: "meta"
+    type: [{ key: "postgres", value: "JSONB" }, { key: "mysql", value: "JSON" }, { key: "sqlite3", value: "JSON" }]
+  }];
+  // Skipped: an embedded message becomes JSON.
+  optional Payload payload = 10 [(sqlmap.v1.col) = { fieldname: "payload" }];
+
+  // has-many. The key column's name differs from team_id, so a join with
+  // its sides mixed up can't pass by coincidence.
+  repeated Member members = 11 [(sqlmap.v1.col) = {
+    foreign_key: { entity: "Member", fieldnames: ["member_team"] }
+  }];
+  // belongs-to itself: the column is filterable, has() is skipped.
+  optional Team parent = 12 [(sqlmap.v1.col) = {
+    fieldname: "parent_id"
+    foreign_key: { entity: "Team", fieldnames: ["team_id"] }
+  }];
+}
+
+message Member {
+  option (sqlmap.v1.table) = { name: "tbl_member" };
+  optional string id = 1 [(sqlmap.v1.col) = { fieldname: "member_id", pk: PK_MAN }];
+  // belongs-to, NOT NULL: a sortable Int column (the team's key) and has().
+  optional Team team = 2 [(sqlmap.v1.col) = {
+    fieldname: "member_team"
+    nullable: false
+    foreign_key: { entity: "Team", fieldnames: ["team_id"] }
+  }];
+}
+
+// A composite primary key leaves Key unset: filterable, not pageable.
+message Badge {
+  option (sqlmap.v1.table) = { name: "tbl_badge" };
+  optional string member_id = 1 [(sqlmap.v1.col) = { fieldname: "member_id", pk: PK_MAN }];
+  optional string label = 2 [(sqlmap.v1.col) = { fieldname: "label", pk: PK_MAN }];
+}

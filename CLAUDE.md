@@ -6,9 +6,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 `protoc-gen-go-sqlmap` is a `protoc`/`buf` code-generator plugin. Given `.proto` messages annotated with `sqlmap` extensions (table/column metadata, primary keys, foreign keys), it emits a `<file>.sqlmap.go` per proto file containing `schema.v1.SchemaTable`/`SchemaColumn` values plus row-scanning helpers. `pkg/migration` then converts those values into `ariga/atlas` schema types to create tables or write migration files.
 
-The goal is a set of independently switchable plugins over one shared `TableRepo`: (1) atlas migrations — **done**; (2) queries with eager loading of children + FieldMask support — **done**; (3) SQL filters built from the filtrify AST (`github.com/snaerverk/filtrify`, `proto/filtrify/ast/v1/ast.proto`). Note `docs/plans/sqlmap-generator/PLAN-SQLMAP-GENERATOR.md` is stale on (3): its Phase 5 sketches ad-hoc per-column builder funcs rather than translating an external AST.
+The goal is a set of independently switchable plugins over one shared `TableRepo`: (1) atlas migrations — **done**; (2) queries with eager loading of children + FieldMask support — **done**; (3) SQL filters built from the filtrify AST (`github.com/snaerverk/filtrify`) — **done** as the opt-in `filter` plugin: it generates a filtrify `sql.Schema` per table and filtrify's `pkg/filter/sql` does the translation. Note `docs/plans/sqlmap-generator/PLAN-SQLMAP-GENERATOR.md` is stale on (3): its Phase 5 sketches ad-hoc per-column builder funcs rather than translating an external AST.
 
-Plugins are toggled with the `plugins=` protoc parameter, a **`+`-separated** list (protoc already uses `,` between parameters): `--go-sqlmap_out=plugins=schema+scanner:.`. Omitting it enables everything. `plugins` entries live in one slice in `generator.go`; `query` declares `Requires: ["scanner"]` because its output calls the scanner's `Result` type, and enabling it alone is a generation-time error rather than uncompilable Go.
+Plugins are toggled with the `plugins=` protoc parameter, a **`+`-separated** list (protoc already uses `,` between parameters): `--go-sqlmap_out=plugins=schema+scanner:.`. Omitting it enables everything. `plugins` entries live in one slice in `generator.go`; `query` declares `Requires: ["scanner"]` because its output calls the scanner's `Result` type, and enabling it alone is a generation-time error rather than uncompilable Go. `filter` is `OptIn`: omitting `plugins=` doesn't enable it, because its output imports filtrify and existing consumers must not suddenly need that module.
 
 ### BSR remote plugin
 
@@ -46,7 +46,7 @@ CI (`.github/workflows/test.yaml`) installs protoc + `protoc-gen-go` + buf, runs
 - `pkg/query/query_test.go` — mask parsing (including that a broad path beats a narrow one in either order), placeholder renumbering, join-key normalization.
 - `pkg/generator/sqlmap/plugins_test.go` — `plugins=` parsing, the scanner dependency, and that a disabled plugin's output really disappears.
 - `pkg/generator/sqlmap/subtype_test.go` — misconfigured hierarchies (`testdata/subtype_bad_*.proto`) must fail generation naming the offending declaration. `generateError` fails the test if generation *succeeds*.
-- `pkg/generator/sqlmap/e2e_test.go` — opt-in (`SQLMAP_E2E=1`, needs docker). `runE2E` starts a throwaway PostgreSQL container, generates a testdata proto through the real pipeline into a temp Go module, and runs a driver against the live database. Two cases: `relation.proto` (nullability, `ON DELETE SET NULL`) and `eager.proto` (FieldMask column selection, eager loading both directions, two levels deep). They need separate containers because both protos declare `tbl_author`/`tbl_book`. The SQL driver (`lib/pq`) lives in the temp module's `go.mod`, never in this repo's — that's how the e2e keeps the two-dependency rule.
+- `pkg/generator/sqlmap/e2e_test.go` — opt-in (`SQLMAP_E2E=1`, needs docker). `runE2E` starts a throwaway PostgreSQL container, generates a testdata proto through the real pipeline into a temp Go module, and runs a driver against the live database. Cases: `relation.proto` (nullability, `ON DELETE SET NULL`), `eager.proto` (FieldMask column selection, eager loading both directions, two levels deep), `subtype.proto`, and `filter.proto` (generated filter schemas through `Load<Msg>`, `has()` both directions and nested, keyset pages with ties). `runE2EWith` takes a `plugins=` value and extra requirements for the temp module — filtrify for the filter case, pinned in `filtrifyModule`. They need separate containers because both protos declare `tbl_author`/`tbl_book`. The SQL driver (`lib/pq`) lives in the temp module's `go.mod`, never in this repo's — that's how the e2e keeps the two-dependency rule.
 
 ## Architecture
 
@@ -66,6 +66,7 @@ pkg/generator/sqlmap/generator.go       SqlGenerator.Generate():
 pkg/writer/schema/writer.go              emits schemav1.SchemaTable + SchemaColumn vars, FK wiring via init()
 pkg/writer/scanner/writer.go             emits `<Msg>Result` struct with Scan(), GetColValue(), Get<Msg>Columns()/PKColumns()
 pkg/writer/query/writer.go               emits <Msg>QueryColumns(), Load<Msg>Rows(), Load<Msg>()
+pkg/writer/filter/writer.go              (opt-in) emits <Msg>Filter, a filtrify sql.Schema; relations wired via init()
     │
     ▼
 <file>.sqlmap.go   (written via protogen.GeneratedFile, package = proto file's go_package)
@@ -87,6 +88,10 @@ Writers use `text/template` against small local `Table`/`Column` view-model stru
 - `Column.GetSqlType(repo, dialect)` resolves the SQL type: explicit `Def.Type[dialect]` wins; otherwise it falls back by proto kind (bool→BOOLEAN, int32→INT(11), int64→BIGINT, string→VARCHAR(255), float→FLOAT; int32/int64 →INTEGER on sqlite3, which AUTOINCREMENT requires). A `MessageKind` field with a `foreign_key` follows the reference into the target table (via `repo.GetByName`) and recurses into that table's PK (or the FK's explicit `fieldnames`) to inherit its type; a `MessageKind` field *without* a foreign key becomes an embedded `JSON` column. Resolution failures are returned as errors, never baked into the generated file.
 - `Column.IsNullable()` — an explicit `nullable` in the column option wins; otherwise PKs are NOT NULL and every other column follows `Field.Desc.HasPresence()` (proto2 `optional`, proto3 `optional`, and message fields have presence; a proto3 bare scalar does not). `pkg/migration` rejects `ON DELETE SET NULL` on a NOT NULL column rather than emitting DDL the database will refuse.
 - The schema writer emits a `SchemaType` entry for **every** dialect in its `dialects` var (mysql/postgres/sqlite3), so one generated file serves any of them; the dialect is chosen at runtime by `migration.New`, not at generation time.
+
+### Filter schemas (`pkg/writer/filter`)
+
+`<Msg>Filter` is the *filter-facing* view of a table, distinct from the migration view `SchemaTable`: keyed by proto field name, an allow-list, filter kinds instead of SQL types, relations named after the parent's field. Columns are emitted as `table.column` (relations put them inside a correlated `EXISTS`). Mapping: string→String, every integer kind→Int, bool→Bool, Timestamp→Time, a belongs-to column→its target key's kind. Skipped with a reason in the generated comment: explicit `JSON`/`JSONB` types, embedded messages, floats, enums, self-referencing relations (both sides would share a table name; needs aliases). `Sortable` is the NOT NULL columns (keyset paging can't cope with NULL ordering differences); `Key` is the single-column PK, unset for composite keys, which filtrify then refuses to paginate. Generating it adds no dependency to this module — only the generated code imports filtrify.
 
 ### Relations and eager loading (`types/relation.go`, `pkg/writer/query`)
 
