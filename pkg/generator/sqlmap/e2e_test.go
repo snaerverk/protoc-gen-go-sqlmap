@@ -547,7 +547,7 @@ func TestE2E_SubtypeConstraints(t *testing.T) {
 
 // filtrifyModule is what the filter plugin's output imports. It lives in the
 // throwaway module only, never in this repo's go.mod.
-const filtrifyModule = "github.com/snaerverk/filtrify@v0.0.2-0.20261018092505-9ffdca291c80"
+const filtrifyModule = "github.com/snaerverk/filtrify@v0.0.2-0.20261018093115-89a6b4659be6"
 
 // TestE2E_Filter covers the filter writer: the generated schemas translate
 // filtrify expressions that sqlmap's loaders run, and page by keyset.
@@ -740,6 +740,176 @@ func run(ctx context.Context, db *sql.DB) error {
 	// A composite key can be filtered but not paged.
 	if _, err := filterpb.BadgeFilter.Page(nil, nil, "label"); err == nil {
 		return fmt.Errorf("Badge paginated without a Key")
+	}
+	return nil
+}
+`
+
+// TestE2E_Page covers the page plugin and pkg/page: Query<Msg> walks pages of
+// a search with the relations the mask selects.
+func TestE2E_Page(t *testing.T) {
+	runE2EWith(t, "filter.proto", "filterpb", pageDriverSrc, "schema+scanner+query+filter+page", filtrifyModule)
+}
+
+// pageDriverSrc runs the generated Query<Msg> functions against PostgreSQL.
+const pageDriverSrc = `package main
+
+import (
+	"context"
+	"database/sql"
+	"errors"
+	"fmt"
+	"slices"
+	"time"
+
+	"e2etest/filterpb"
+
+	"github.com/snaerverk/filtrify/pkg/filter"
+	paginatev1 "github.com/snaerverk/filtrify/pkg/generated/filtrify/paginate/v1"
+	"github.com/snaerverk/protoc-gen-go-sqlmap/pkg/migration"
+	"github.com/snaerverk/protoc-gen-go-sqlmap/pkg/page"
+	"github.com/snaerverk/protoc-gen-go-sqlmap/pkg/query"
+	"google.golang.org/protobuf/types/known/fieldmaskpb"
+)
+
+func day(d int) time.Time { return time.Date(2026, 1, d, 0, 0, 0, 0, time.UTC) }
+
+func run(ctx context.Context, db *sql.DB) error {
+	m, err := migration.New(db, "postgres")
+	if err != nil {
+		return err
+	}
+	if err := m.Create(ctx, filterpb.TeamTable, filterpb.MemberTable, filterpb.BadgeTable); err != nil {
+		return fmt.Errorf("create: %w", err)
+	}
+	// Seven teams; founded ties in pairs so pages split ties.
+	for i := int64(1); i <= 7; i++ {
+		if _, err := db.ExecContext(ctx, "INSERT INTO tbl_team (team_id, team_name, active, founded) VALUES ($1, $2, $3, $4)",
+			i, fmt.Sprintf("team-%d", i), i%2 == 1, day(int((i+1)/2))); err != nil {
+			return err
+		}
+	}
+	for _, mb := range [][2]any{{"m1", 1}, {"m2", 1}, {"m3", 3}, {"m4", 7}} {
+		if _, err := db.ExecContext(ctx, "INSERT INTO tbl_member (member_id, member_team) VALUES ($1, $2)", mb[0], mb[1]); err != nil {
+			return err
+		}
+	}
+	conn := query.Conn{DB: db, Dialect: query.Postgres}
+
+	walk := func(req page.Request, size int32, mask *fieldmaskpb.FieldMask) ([]*filterpb.Team, int, error) {
+		var all []*filterpb.Team
+		total := -1
+		after := ""
+		for range 20 {
+			req.Paging = &paginatev1.Paging{First: size, After: after}
+			res, err := filterpb.QueryTeam(ctx, conn, req, mask)
+			if err != nil {
+				return nil, 0, err
+			}
+			if total >= 0 && res.Total != total {
+				return nil, 0, fmt.Errorf("total changed between pages: %d, %d", total, res.Total)
+			}
+			total = res.Total
+			if res.Page.HasPrevious != (after != "") {
+				return nil, 0, fmt.Errorf("has previous %v after %q", res.Page.HasPrevious, after)
+			}
+			all = append(all, res.Rows...)
+			if !res.Page.HasNext {
+				return all, total, nil
+			}
+			after = res.Page.LastCursor
+		}
+		return nil, 0, fmt.Errorf("no last page")
+	}
+	ids := func(teams []*filterpb.Team) []int64 {
+		var out []int64
+		for _, tm := range teams {
+			out = append(out, tm.GetId())
+		}
+		return out
+	}
+
+	// Default order: the key.
+	for _, size := range []int32{1, 3, 7, 50} {
+		teams, total, err := walk(page.Request{}, size, nil)
+		if err != nil {
+			return err
+		}
+		if got, want := ids(teams), []int64{1, 2, 3, 4, 5, 6, 7}; !slices.Equal(got, want) || total != 7 {
+			return fmt.Errorf("default order, size %d: %v (total %d)", size, got, total)
+		}
+	}
+
+	// Search + order with ties, relations loaded through the mask.
+	expr, err := filter.Parse(ctx, ` + "`active = true OR has(members, id = \"m4\")`" + `)
+	if err != nil {
+		return err
+	}
+	req := page.Request{
+		Search: expr,
+		Order:  []*paginatev1.OrderField{{Field: "founded", Direction: paginatev1.Direction_DIRECTION_DESC}},
+	}
+	mask := &fieldmaskpb.FieldMask{Paths: []string{"name", "members.id"}}
+	for _, size := range []int32{1, 2, 4} {
+		teams, total, err := walk(req, size, mask)
+		if err != nil {
+			return err
+		}
+		// Matches 1, 3, 5, 7; founded desc, ties by key desc (the key
+		// follows the last field's direction).
+		if got, want := ids(teams), []int64{7, 5, 3, 1}; !slices.Equal(got, want) || total != 4 {
+			return fmt.Errorf("search, size %d: %v (total %d)", size, got, total)
+		}
+		var members []string
+		for _, tm := range teams {
+			for _, mb := range tm.GetMembers() {
+				members = append(members, mb.GetId())
+			}
+		}
+		slices.Sort(members)
+		if want := []string{"m1", "m2", "m3", "m4"}; !slices.Equal(members, want) {
+			return fmt.Errorf("members loaded: %v", members)
+		}
+		if teams[0].GetName() != "team-7" || teams[0].Active != nil {
+			return fmt.Errorf("mask: got name %q, active %v", teams[0].GetName(), teams[0].Active)
+		}
+	}
+
+	// Trusted conditions combine with the search, and with the count.
+	req.Conds = []query.Cond{{SQL: "tbl_team.team_id <= ?", Args: []any{int64(3)}}}
+	teams, total, err := walk(req, 1, nil)
+	if err != nil {
+		return err
+	}
+	if got, want := ids(teams), []int64{3, 1}; !slices.Equal(got, want) || total != 2 {
+		return fmt.Errorf("conds: %v (total %d)", got, total)
+	}
+
+	// A string key, ordered by a belongs-to column.
+	res, err := filterpb.QueryMember(ctx, conn, page.Request{
+		Order: []*paginatev1.OrderField{{Field: "team", Direction: paginatev1.Direction_DIRECTION_DESC}},
+	}, &fieldmaskpb.FieldMask{Paths: []string{"team.name"}})
+	if err != nil {
+		return err
+	}
+	var got []string
+	for _, mb := range res.Rows {
+		got = append(got, mb.GetId()+"/"+mb.GetTeam().GetName())
+	}
+	if want := []string{"m4/team-7", "m3/team-3", "m2/team-1", "m1/team-1"}; !slices.Equal(got, want) {
+		return fmt.Errorf("members by team desc: %v", got)
+	}
+
+	// Client mistakes are filter.ErrInvalid; nothing is queried for them.
+	bad, _ := filter.Parse(ctx, ` + "`nope = 1`" + `)
+	for name, r := range map[string]page.Request{
+		"unknown field":  {Search: bad},
+		"unknown order":  {Order: []*paginatev1.OrderField{{Field: "motto"}}},
+		"garbage cursor": {Paging: &paginatev1.Paging{After: "x"}},
+	} {
+		if _, err := filterpb.QueryTeam(ctx, conn, r, nil); !errors.Is(err, filter.ErrInvalid) {
+			return fmt.Errorf("%s: err = %v, want filter.ErrInvalid", name, err)
+		}
 	}
 	return nil
 }

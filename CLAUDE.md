@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 The goal is a set of independently switchable plugins over one shared `TableRepo`: (1) atlas migrations — **done**; (2) queries with eager loading of children + FieldMask support — **done**; (3) SQL filters built from the filtrify AST (`github.com/snaerverk/filtrify`) — **done** as the opt-in `filter` plugin: it generates a filtrify `sql.Schema` per table and filtrify's `pkg/filter/sql` does the translation. Note `docs/plans/sqlmap-generator/PLAN-SQLMAP-GENERATOR.md` is stale on (3): its Phase 5 sketches ad-hoc per-column builder funcs rather than translating an external AST.
 
-Plugins are toggled with the `plugins=` protoc parameter, a **`+`-separated** list (protoc already uses `,` between parameters): `--go-sqlmap_out=plugins=schema+scanner:.`. Omitting it enables everything. `plugins` entries live in one slice in `generator.go`; `query` declares `Requires: ["scanner"]` because its output calls the scanner's `Result` type, and enabling it alone is a generation-time error rather than uncompilable Go. `filter` is `OptIn`: omitting `plugins=` doesn't enable it, because its output imports filtrify and existing consumers must not suddenly need that module.
+Plugins are toggled with the `plugins=` protoc parameter, a **`+`-separated** list (protoc already uses `,` between parameters): `--go-sqlmap_out=plugins=schema+scanner:.`. Omitting it enables everything. `plugins` entries live in one slice in `generator.go`; `query` declares `Requires: ["scanner"]` because its output calls the scanner's `Result` type, and enabling it alone is a generation-time error rather than uncompilable Go. `filter` and `page` are `OptIn`: omitting `plugins=` doesn't enable them, because their output imports filtrify and existing consumers must not suddenly need that module. `page` requires `query` and `filter`.
 
 ### BSR remote plugin
 
@@ -23,7 +23,7 @@ plugins:
 
 `buf.plugin.yaml` pins the runtime module the generated code imports (`pkg/query`, `pkg/generated/schema/v1`), so `plugin_version` and `registry.go.deps` must both match the git tag — the release workflow fails if they drift. Publishing happens in CI on tag (`buf beta registry plugin push`, needs `BUF_TOKEN`); it is a separate resource from the `buf.build/snaerverk/protoc-gen-go-sqlmap` *module* that carries the protos. Test the image locally with `docker build -t x . && protoc --plugin=protoc-gen-y=<script running 'docker run --rm -i x'>`.
 
-**Dependency rule: only `ariga.io/atlas` and `google.golang.org/protobuf` are allowed as direct dependencies.** Ask before adding any other, test-only ones included — prefer plain stdlib loops over utility libraries. Target Go 1.27.
+**Dependency rule: only `ariga.io/atlas`, `google.golang.org/protobuf` and `github.com/snaerverk/filtrify` are allowed as direct dependencies** — filtrify only for `pkg/page` (it brings in grpc via its AST package; `pkg/query` and `pkg/migration` stay free of it). Ask before adding any other, test-only ones included — prefer plain stdlib loops over utility libraries. Target Go 1.27.
 
 ## Commands
 
@@ -46,7 +46,7 @@ CI (`.github/workflows/test.yaml`) installs protoc + `protoc-gen-go` + buf, runs
 - `pkg/query/query_test.go` — mask parsing (including that a broad path beats a narrow one in either order), placeholder renumbering, join-key normalization.
 - `pkg/generator/sqlmap/plugins_test.go` — `plugins=` parsing, the scanner dependency, and that a disabled plugin's output really disappears.
 - `pkg/generator/sqlmap/subtype_test.go` — misconfigured hierarchies (`testdata/subtype_bad_*.proto`) must fail generation naming the offending declaration. `generateError` fails the test if generation *succeeds*.
-- `pkg/generator/sqlmap/e2e_test.go` — opt-in (`SQLMAP_E2E=1`, needs docker). `runE2E` starts a throwaway PostgreSQL container, generates a testdata proto through the real pipeline into a temp Go module, and runs a driver against the live database. Cases: `relation.proto` (nullability, `ON DELETE SET NULL`), `eager.proto` (FieldMask column selection, eager loading both directions, two levels deep), `subtype.proto`, and `filter.proto` (generated filter schemas through `Load<Msg>`, `has()` both directions and nested, keyset pages with ties). `runE2EWith` takes a `plugins=` value and extra requirements for the temp module — filtrify for the filter case, pinned in `filtrifyModule`. They need separate containers because both protos declare `tbl_author`/`tbl_book`. The SQL driver (`lib/pq`) lives in the temp module's `go.mod`, never in this repo's — that's how the e2e keeps the two-dependency rule.
+- `pkg/generator/sqlmap/e2e_test.go` — opt-in (`SQLMAP_E2E=1`, needs docker). `runE2E` starts a throwaway PostgreSQL container, generates a testdata proto through the real pipeline into a temp Go module, and runs a driver against the live database. Cases: `relation.proto` (nullability, `ON DELETE SET NULL`), `eager.proto` (FieldMask column selection, eager loading both directions, two levels deep), `subtype.proto`, `filter.proto` for the page plugin (`Query<Msg>` page walks with search, ties, mask-loaded relations, trusted `Conds`, string keys, `filter.ErrInvalid`), and `filter.proto` (generated filter schemas through `Load<Msg>`, `has()` both directions and nested, keyset pages with ties). `runE2EWith` takes a `plugins=` value and extra requirements for the temp module — filtrify for the filter case, pinned in `filtrifyModule`. They need separate containers because both protos declare `tbl_author`/`tbl_book`. The SQL driver (`lib/pq`) lives in the temp module's `go.mod`, never in this repo's — that's how the e2e keeps the two-dependency rule.
 
 ## Architecture
 
@@ -67,6 +67,7 @@ pkg/writer/schema/writer.go              emits schemav1.SchemaTable + SchemaColu
 pkg/writer/scanner/writer.go             emits `<Msg>Result` struct with Scan(), GetColValue(), Get<Msg>Columns()/PKColumns()
 pkg/writer/query/writer.go               emits <Msg>QueryColumns(), Load<Msg>Rows(), Load<Msg>()
 pkg/writer/filter/writer.go              (opt-in) emits <Msg>Filter, a filtrify sql.Schema; relations wired via init()
+pkg/writer/page/writer.go                (opt-in) emits Query<Msg>(ctx, conn, page.Request, mask) for single-key tables
     │
     ▼
 <file>.sqlmap.go   (written via protogen.GeneratedFile, package = proto file's go_package)
@@ -74,6 +75,7 @@ pkg/writer/filter/writer.go              (opt-in) emits <Msg>Filter, a filtrify 
     ▼
 pkg/migration (runtime, not generated)   toSchema() → atlas schema.Table; Create/Diff/ApplyPending
 pkg/query     (runtime, not generated)   Mask, Conn/Select, In/Key/Keys placeholder + join-key helpers
+pkg/page      (runtime, not generated)   Query: COUNT, page of keys (search + keyset), Load<Msg>Rows on them, page order restored
 ```
 
 Writers are plain functions registered in a slice in `generator.go` (`writers: []func(writer.Printer, types.TableRepo) writer.Writer{schema.New, scanner.New}`). Adding a new generated artifact means adding a new writer package + appending it to that slice — no changes needed to the core loop.
@@ -92,6 +94,8 @@ Writers use `text/template` against small local `Table`/`Column` view-model stru
 ### Filter schemas (`pkg/writer/filter`)
 
 `<Msg>Filter` is the *filter-facing* view of a table, distinct from the migration view `SchemaTable`: keyed by proto field name, an allow-list, filter kinds instead of SQL types, relations named after the parent's field. Columns are emitted as `table.column` (relations put them inside a correlated `EXISTS`). Mapping: string→String, every integer kind→Int, bool→Bool, Timestamp→Time, a belongs-to column→its target key's kind. Skipped with a reason in the generated comment: explicit `JSON`/`JSONB` types, embedded messages, floats, enums, self-referencing relations (both sides would share a table name; needs aliases). `Sortable` is the NOT NULL columns (keyset paging can't cope with NULL ordering differences); `Key` is the single-column PK, unset for composite keys, which filtrify then refuses to paginate. Generating it adds no dependency to this module — only the generated code imports filtrify.
+
+`Query<Msg>` (page plugin) wraps `pkg/page.Query`: the count, then `SELECT key, sort columns … ORDER BY … LIMIT n+1` for the page of keys (the extra row sets `HasNext`), then `Load<Msg>Rows` with `key IN (…)` and the mask, re-sorted into page order. Three statements, no shared snapshot. Tables without a single non-reference PK get a comment instead.
 
 ### Relations and eager loading (`types/relation.go`, `pkg/writer/query`)
 
