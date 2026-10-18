@@ -3,8 +3,8 @@ module github.com/snaerverk/protoc-gen-go-sqlmap
 go 1.27
 
 require (
-	ariga.io/atlas v0.36.2-0.20250730182955-2c6300d0a3e1
-	google.golang.org/protobuf v1.36.11
+	ariga.io/atlas v1.3.0
+	google.golang.org/protobuf v1.36.12
 )
 
 require (
@@ -16,14 +16,11 @@ require (
 	github.com/hashicorp/hcl/v2 v2.18.1 // indirect
 	github.com/kr/pretty v0.3.0 // indirect
 	github.com/mitchellh/go-wordwrap v1.0.1 // indirect
-	github.com/niemeyer/pretty v0.0.0-20200227124842-a10e7caefd8e // indirect
 	github.com/rogpeppe/go-internal v1.15.0 // indirect
 	github.com/sergi/go-diff v1.3.1 // indirect
-	github.com/stretchr/testify v1.8.4 // indirect
 	github.com/zclconf/go-cty v1.14.4 // indirect
 	github.com/zclconf/go-cty-yaml v1.1.0 // indirect
-	golang.org/x/mod v0.24.0 // indirect
-	golang.org/x/text v0.22.0 // indirect
-	gopkg.in/check.v1 v1.0.0-20200227125254-8fa46927fb4f // indirect
+	golang.org/x/mod v0.35.0 // indirect
+	golang.org/x/text v0.37.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
