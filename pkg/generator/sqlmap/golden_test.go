@@ -211,3 +211,21 @@ func fileNames(files map[string]string) []string {
 	}
 	return names
 }
+
+// The golden tests hand the request to the generator directly, so protoc's
+// feature check never runs; without the flag protoc and buf refuse every file
+// using proto3 `optional`, as relation.proto does.
+func TestGenerate_SupportsProto3Optional(t *testing.T) {
+	gen, err := New(protogen.Options{}, buildRequest(t, "relation.proto", ""))
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err := gen.Generate()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := uint64(pluginpb.CodeGeneratorResponse_FEATURE_PROTO3_OPTIONAL)
+	if resp.GetSupportedFeatures()&want == 0 {
+		t.Fatalf("SupportedFeatures = %d, want FEATURE_PROTO3_OPTIONAL set", resp.GetSupportedFeatures())
+	}
+}
