@@ -7,6 +7,7 @@ import (
 
 	"github.com/snaerverk/protoc-gen-go-sqlmap/pkg/generator/sqlmap/types"
 	"github.com/snaerverk/protoc-gen-go-sqlmap/pkg/writer"
+	"github.com/snaerverk/protoc-gen-go-sqlmap/pkg/writer/filter"
 	"github.com/snaerverk/protoc-gen-go-sqlmap/pkg/writer/query"
 	"github.com/snaerverk/protoc-gen-go-sqlmap/pkg/writer/scanner"
 	"github.com/snaerverk/protoc-gen-go-sqlmap/pkg/writer/schema"
@@ -21,12 +22,17 @@ type plugin struct {
 	New  func(writer.Printer, types.TableRepo) writer.Writer
 	// Requires names plugins whose output this one refers to.
 	Requires []string
+	// OptIn plugins only run when plugins= names them, as their output
+	// imports a module the generated code didn't need before.
+	OptIn bool
 }
 
 var plugins = []plugin{
 	{Name: "schema", New: schema.New},
 	{Name: "scanner", New: scanner.New},
 	{Name: "query", New: query.New, Requires: []string{"scanner"}},
+	// Imports github.com/snaerverk/filtrify.
+	{Name: "filter", New: filter.New, OptIn: true},
 }
 
 type SqlGenerator struct {
@@ -63,7 +69,7 @@ func New(opts protogen.Options, request *pluginpb.CodeGeneratorRequest) (*SqlGen
 }
 
 // parseEnabled reads `plugins=`, a `+`-separated list (protoc already uses
-// `,`). All plugins are enabled when it is absent.
+// `,`). All plugins but the opt-in ones are enabled when it is absent.
 func parseEnabled(param string) (map[string]bool, error) {
 	enabled := make(map[string]bool, len(plugins))
 	var spec string
@@ -74,7 +80,7 @@ func parseEnabled(param string) (map[string]bool, error) {
 	}
 	if spec == "" {
 		for _, p := range plugins {
-			enabled[p.Name] = true
+			enabled[p.Name] = !p.OptIn
 		}
 		return enabled, nil
 	}

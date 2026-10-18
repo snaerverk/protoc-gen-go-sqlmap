@@ -429,6 +429,13 @@ func hostPort(id string) (string, error) {
 // The SQL driver belongs to that module, not this repo.
 func runE2E(t *testing.T, protoFile, pkgName, driverSrc string) {
 	t.Helper()
+	runE2EWith(t, protoFile, pkgName, driverSrc, "")
+}
+
+// runE2EWith is runE2E with a plugins= value ("" for the default) and extra
+// module requirements for the throwaway module, such as filtrify.
+func runE2EWith(t *testing.T, protoFile, pkgName, driverSrc, plugins string, require ...string) {
+	t.Helper()
 	if os.Getenv("SQLMAP_E2E") == "" {
 		t.Skip("set SQLMAP_E2E=1 to run (needs docker, protoc, protoc-gen-go, and module-cache access)")
 	}
@@ -468,7 +475,11 @@ func runE2E(t *testing.T, protoFile, pkgName, driverSrc string) {
 	}
 
 	// 2. Schema/scanner/query code, via our own generator, in-process.
-	files := generate(t, protoFile)
+	param := ""
+	if plugins != "" {
+		param = "plugins=" + plugins
+	}
+	files := generateWith(t, protoFile, param)
 	generated, ok := files[base+".sqlmap.go"]
 	if !ok {
 		t.Fatalf("no %s.sqlmap.go in generated output, got files: %v", base, fileNames(files))
@@ -504,10 +515,14 @@ func runE2E(t *testing.T, protoFile, pkgName, driverSrc string) {
 		}
 		return string(out)
 	}
-	run("go", "mod", "edit",
+	edit := []string{"mod", "edit",
 		"-require=github.com/snaerverk/protoc-gen-go-sqlmap@v0.0.0",
-		"-replace=github.com/snaerverk/protoc-gen-go-sqlmap="+repoRoot,
-	)
+		"-replace=github.com/snaerverk/protoc-gen-go-sqlmap=" + repoRoot,
+	}
+	for _, r := range require {
+		edit = append(edit, "-require="+r)
+	}
+	run("go", edit...)
 	run("go", "mod", "tidy")
 
 	if out := run("go", "run", "."); out != "OK\n" {
@@ -529,3 +544,203 @@ func TestE2E_EagerLoading(t *testing.T) {
 func TestE2E_SubtypeConstraints(t *testing.T) {
 	runE2E(t, "subtype.proto", "subtypepb", subtypeDriverSrc)
 }
+
+// filtrifyModule is what the filter plugin's output imports. It lives in the
+// throwaway module only, never in this repo's go.mod.
+const filtrifyModule = "github.com/snaerverk/filtrify@v0.0.2-0.20261018092505-9ffdca291c80"
+
+// TestE2E_Filter covers the filter writer: the generated schemas translate
+// filtrify expressions that sqlmap's loaders run, and page by keyset.
+func TestE2E_Filter(t *testing.T) {
+	runE2EWith(t, "filter.proto", "filterpb", filterDriverSrc, "schema+scanner+query+filter", filtrifyModule)
+}
+
+// filterDriverSrc runs the generated filter schemas against PostgreSQL.
+const filterDriverSrc = `package main
+
+import (
+	"context"
+	"database/sql"
+	"fmt"
+	"slices"
+	"strings"
+	"time"
+
+	"e2etest/filterpb"
+
+	"github.com/snaerverk/filtrify/pkg/filter"
+	fsql "github.com/snaerverk/filtrify/pkg/filter/sql"
+	paginatev1 "github.com/snaerverk/filtrify/pkg/generated/filtrify/paginate/v1"
+	"github.com/snaerverk/protoc-gen-go-sqlmap/pkg/migration"
+	"github.com/snaerverk/protoc-gen-go-sqlmap/pkg/query"
+	"google.golang.org/protobuf/types/known/fieldmaskpb"
+)
+
+func day(d int) time.Time { return time.Date(2026, 1, d, 0, 0, 0, 0, time.UTC) }
+
+func run(ctx context.Context, db *sql.DB) error {
+	m, err := migration.New(db, "postgres")
+	if err != nil {
+		return err
+	}
+	if err := m.Create(ctx, filterpb.TeamTable, filterpb.MemberTable, filterpb.BadgeTable); err != nil {
+		return fmt.Errorf("create: %w", err)
+	}
+	// Teams 1 and 3 tie on founded; team 2's size is NULL.
+	for _, tm := range []struct {
+		id      int64
+		name    string
+		active  bool
+		founded time.Time
+		size    any
+	}{
+		{1, "Acme", true, day(1), 10},
+		{2, "acme_50%", false, day(2), nil},
+		{3, "Beta", true, day(1), 30},
+		{4, "Gamma", false, day(3), 20},
+	} {
+		if _, err := db.ExecContext(ctx, "INSERT INTO tbl_team (team_id, team_name, active, founded, size) VALUES ($1, $2, $3, $4, $5)",
+			tm.id, tm.name, tm.active, tm.founded, tm.size); err != nil {
+			return err
+		}
+	}
+	for _, mb := range [][2]any{{"m1", 1}, {"m2", 1}, {"m3", 3}} {
+		if _, err := db.ExecContext(ctx, "INSERT INTO tbl_member (member_id, member_team) VALUES ($1, $2)", mb[0], mb[1]); err != nil {
+			return err
+		}
+	}
+	conn := query.Conn{DB: db, Dialect: query.Postgres}
+
+	// Filters run through sqlmap's own loader, which renumbers filtrify's
+	// "?" placeholders for PostgreSQL alongside its own.
+	teams := func(f string) ([]int64, error) {
+		expr, err := filter.Parse(ctx, f)
+		if err != nil {
+			return nil, err
+		}
+		cond, err := filterpb.TeamFilter.Cond(expr)
+		if err != nil {
+			return nil, err
+		}
+		rows, err := filterpb.LoadTeam(ctx, conn, &fieldmaskpb.FieldMask{Paths: []string{"name"}}, query.Cond(cond))
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", f, err)
+		}
+		var ids []int64
+		for _, r := range rows {
+			ids = append(ids, r.GetId())
+		}
+		slices.Sort(ids)
+		return ids, nil
+	}
+	for f, want := range map[string][]int64{
+		` + "`contains(name, \"ACME\")`" + `:                         {1, 2},
+		` + "`contains(name, \"_50%\")`" + `:                         {2},
+		` + "`active = true AND founded = \"2026-01-01\"`" + `:       {1, 3},
+		` + "`size >= 20`" + `:                                      {3, 4},
+		` + "`has(members, id = \"m3\")`" + `:                       {3},
+		` + "`NOT has(members, id != \"\")`" + `:                    {2, 4},
+		` + "`in(id, [2, 4]) OR name = \"Beta\"`" + `:                {2, 3, 4},
+		` + "`parent = 1`" + `:                                      nil,
+	} {
+		got, err := teams(f)
+		if err != nil {
+			return err
+		}
+		if !slices.Equal(got, want) {
+			return fmt.Errorf("teams %s: got %v, want %v", f, got, want)
+		}
+	}
+
+	// belongs-to, and back down through the same table.
+	members := func(f string) ([]string, error) {
+		expr, err := filter.Parse(ctx, f)
+		if err != nil {
+			return nil, err
+		}
+		cond, err := filterpb.MemberFilter.Cond(expr)
+		if err != nil {
+			return nil, err
+		}
+		rows, err := filterpb.LoadMember(ctx, conn, nil, query.Cond(cond))
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", f, err)
+		}
+		var ids []string
+		for _, r := range rows {
+			ids = append(ids, r.GetId())
+		}
+		slices.Sort(ids)
+		return ids, nil
+	}
+	for f, want := range map[string][]string{
+		` + "`has(team, name = \"Acme\")`" + `:                              {"m1", "m2"},
+		` + "`has(team, active = true AND has(members, id = \"m3\"))`" + `: {"m3"},
+		` + "`team = 1`" + `:                                                {"m1", "m2"},
+	} {
+		got, err := members(f)
+		if err != nil {
+			return err
+		}
+		if !slices.Equal(got, want) {
+			return fmt.Errorf("members %s: got %v, want %v", f, got, want)
+		}
+	}
+
+	// Keyset pages: founded desc, ties by name.
+	order := []*paginatev1.OrderField{
+		{Field: "founded", Direction: paginatev1.Direction_DIRECTION_DESC},
+		{Field: "name"},
+	}
+	for _, size := range []int32{1, 2, 3} {
+		var got []int64
+		after := ""
+		for {
+			page, err := filterpb.TeamFilter.Page(order, &paginatev1.Paging{First: size, After: after}, "name")
+			if err != nil {
+				return err
+			}
+			var conds []fsql.Cond
+			if c, ok := page.After(); ok {
+				conds = append(conds, c)
+			}
+			where, args := fsql.Where(conds...)
+			stmt := fmt.Sprintf("SELECT tbl_team.team_id, %s FROM tbl_team%s ORDER BY %s LIMIT %d",
+				strings.Join(page.Columns(), ", "), where, page.OrderBy(), page.Size()+1)
+			rows, err := db.QueryContext(ctx, fsql.Rebind(fsql.Postgres, stmt), args...)
+			if err != nil {
+				return fmt.Errorf("%s: %w", stmt, err)
+			}
+			n, last, more := 0, "", false
+			for rows.Next() {
+				if n == page.Size() {
+					more = true
+					break
+				}
+				var id int64
+				dest := page.Dest()
+				if err := rows.Scan(append([]any{&id}, dest...)...); err != nil {
+					return err
+				}
+				got = append(got, id)
+				last = page.Cursor(dest)
+				n++
+			}
+			rows.Close()
+			if !more {
+				break
+			}
+			after = last
+		}
+		if want := []int64{4, 2, 1, 3}; !slices.Equal(got, want) {
+			return fmt.Errorf("pages of %d: got %v, want %v", size, got, want)
+		}
+	}
+
+	// A composite key can be filtered but not paged.
+	if _, err := filterpb.BadgeFilter.Page(nil, nil, "label"); err == nil {
+		return fmt.Errorf("Badge paginated without a Key")
+	}
+	return nil
+}
+`

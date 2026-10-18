@@ -1,0 +1,756 @@
+package filterpb
+
+import (
+	context "context"
+	sql "database/sql"
+	fmt "fmt"
+	filter "github.com/snaerverk/filtrify/pkg/filter"
+	sql1 "github.com/snaerverk/filtrify/pkg/filter/sql"
+	v1 "github.com/snaerverk/protoc-gen-go-sqlmap/pkg/generated/schema/v1"
+	query "github.com/snaerverk/protoc-gen-go-sqlmap/pkg/query"
+	proto "google.golang.org/protobuf/proto"
+	fieldmaskpb "google.golang.org/protobuf/types/known/fieldmaskpb"
+	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
+)
+
+var (
+	TeamColumnDef_Id = &v1.SchemaColumn{
+		Name: proto.String("team_id"),
+		Type: map[string]string{
+			"mysql":    "BIGINT",
+			"postgres": "BIGINT",
+			"sqlite3":  "INTEGER",
+		},
+		Pk:       v1.PK_PK_AUTO.Enum(),
+		Nullable: proto.Bool(false),
+	}
+	TeamColumnDef_Name = &v1.SchemaColumn{
+		Name: proto.String("team_name"),
+		Type: map[string]string{
+			"mysql":    "VARCHAR(255)",
+			"postgres": "VARCHAR(255)",
+			"sqlite3":  "VARCHAR(255)",
+		},
+		Pk:       v1.PK_PK_UNSPECIFIED.Enum(),
+		Nullable: proto.Bool(false),
+	}
+	TeamColumnDef_Motto = &v1.SchemaColumn{
+		Name: proto.String("motto"),
+		Type: map[string]string{
+			"mysql":    "VARCHAR(255)",
+			"postgres": "VARCHAR(255)",
+			"sqlite3":  "VARCHAR(255)",
+		},
+		Pk:       v1.PK_PK_UNSPECIFIED.Enum(),
+		Nullable: proto.Bool(true),
+	}
+	TeamColumnDef_Active = &v1.SchemaColumn{
+		Name: proto.String("active"),
+		Type: map[string]string{
+			"mysql":    "BOOLEAN",
+			"postgres": "BOOLEAN",
+			"sqlite3":  "BOOLEAN",
+		},
+		Pk:       v1.PK_PK_UNSPECIFIED.Enum(),
+		Nullable: proto.Bool(false),
+	}
+	TeamColumnDef_Founded = &v1.SchemaColumn{
+		Name: proto.String("founded"),
+		Type: map[string]string{
+			"mysql":    "DATETIME",
+			"postgres": "TIMESTAMPTZ",
+			"sqlite3":  "TIMESTAMP",
+		},
+		Pk:       v1.PK_PK_UNSPECIFIED.Enum(),
+		Nullable: proto.Bool(false),
+	}
+	TeamColumnDef_Size = &v1.SchemaColumn{
+		Name: proto.String("size"),
+		Type: map[string]string{
+			"mysql":    "INT UNSIGNED",
+			"postgres": "BIGINT",
+			"sqlite3":  "INTEGER",
+		},
+		Pk:       v1.PK_PK_UNSPECIFIED.Enum(),
+		Nullable: proto.Bool(true),
+	}
+	TeamColumnDef_Score = &v1.SchemaColumn{
+		Name: proto.String("score"),
+		Type: map[string]string{
+			"mysql":    "FLOAT",
+			"postgres": "FLOAT",
+			"sqlite3":  "FLOAT",
+		},
+		Pk:       v1.PK_PK_UNSPECIFIED.Enum(),
+		Nullable: proto.Bool(true),
+	}
+	TeamColumnDef_Level = &v1.SchemaColumn{
+		Name: proto.String("level"),
+		Type: map[string]string{
+			"mysql":    "INT",
+			"postgres": "INTEGER",
+			"sqlite3":  "INTEGER",
+		},
+		Pk:       v1.PK_PK_UNSPECIFIED.Enum(),
+		Nullable: proto.Bool(true),
+	}
+	TeamColumnDef_Meta = &v1.SchemaColumn{
+		Name: proto.String("meta"),
+		Type: map[string]string{
+			"mysql":    "JSON",
+			"postgres": "JSONB",
+			"sqlite3":  "JSON",
+		},
+		Pk:       v1.PK_PK_UNSPECIFIED.Enum(),
+		Nullable: proto.Bool(true),
+	}
+	TeamColumnDef_Payload = &v1.SchemaColumn{
+		Name: proto.String("payload"),
+		Type: map[string]string{
+			"mysql":    "JSON",
+			"postgres": "JSON",
+			"sqlite3":  "JSON",
+		},
+		Pk:       v1.PK_PK_UNSPECIFIED.Enum(),
+		Nullable: proto.Bool(true),
+	}
+	TeamColumnDef_Parent = &v1.SchemaColumn{
+		Name: proto.String("parent_id"),
+		Type: map[string]string{
+			"mysql":    "BIGINT",
+			"postgres": "BIGINT",
+			"sqlite3":  "INTEGER",
+		},
+		Pk:       v1.PK_PK_UNSPECIFIED.Enum(),
+		Nullable: proto.Bool(true),
+	}
+)
+var TeamTable = &v1.SchemaTable{
+	Name: proto.String("tbl_team"),
+	Columns: []*v1.SchemaColumn{
+		TeamColumnDef_Id,
+		TeamColumnDef_Name,
+		TeamColumnDef_Motto,
+		TeamColumnDef_Active,
+		TeamColumnDef_Founded,
+		TeamColumnDef_Size,
+		TeamColumnDef_Score,
+		TeamColumnDef_Level,
+		TeamColumnDef_Meta,
+		TeamColumnDef_Payload,
+		TeamColumnDef_Parent,
+	},
+}
+
+func init() {
+	TeamTable.ForeignKeys = append(TeamTable.ForeignKeys, &v1.SchemaForeignKey{
+		Columns: []*v1.SchemaColumn{
+			TeamColumnDef_Parent,
+		},
+		RefTable: TeamTable,
+		RefColumns: []*v1.SchemaColumn{
+			TeamColumnDef_Id,
+		},
+		OnDelete: v1.OnDelete_ON_DELETE_UNSPECIFIED.Enum(),
+	})
+}
+
+var (
+	MemberColumnDef_Id = &v1.SchemaColumn{
+		Name: proto.String("member_id"),
+		Type: map[string]string{
+			"mysql":    "VARCHAR(255)",
+			"postgres": "VARCHAR(255)",
+			"sqlite3":  "VARCHAR(255)",
+		},
+		Pk:       v1.PK_PK_MAN.Enum(),
+		Nullable: proto.Bool(false),
+	}
+	MemberColumnDef_Team = &v1.SchemaColumn{
+		Name: proto.String("member_team"),
+		Type: map[string]string{
+			"mysql":    "BIGINT",
+			"postgres": "BIGINT",
+			"sqlite3":  "INTEGER",
+		},
+		Pk:       v1.PK_PK_UNSPECIFIED.Enum(),
+		Nullable: proto.Bool(false),
+	}
+)
+var MemberTable = &v1.SchemaTable{
+	Name: proto.String("tbl_member"),
+	Columns: []*v1.SchemaColumn{
+		MemberColumnDef_Id,
+		MemberColumnDef_Team,
+	},
+}
+
+func init() {
+	MemberTable.ForeignKeys = append(MemberTable.ForeignKeys, &v1.SchemaForeignKey{
+		Columns: []*v1.SchemaColumn{
+			MemberColumnDef_Team,
+		},
+		RefTable: TeamTable,
+		RefColumns: []*v1.SchemaColumn{
+			TeamColumnDef_Id,
+		},
+		OnDelete: v1.OnDelete_ON_DELETE_UNSPECIFIED.Enum(),
+	})
+}
+
+var (
+	BadgeColumnDef_MemberId = &v1.SchemaColumn{
+		Name: proto.String("member_id"),
+		Type: map[string]string{
+			"mysql":    "VARCHAR(255)",
+			"postgres": "VARCHAR(255)",
+			"sqlite3":  "VARCHAR(255)",
+		},
+		Pk:       v1.PK_PK_MAN.Enum(),
+		Nullable: proto.Bool(false),
+	}
+	BadgeColumnDef_Label = &v1.SchemaColumn{
+		Name: proto.String("label"),
+		Type: map[string]string{
+			"mysql":    "VARCHAR(255)",
+			"postgres": "VARCHAR(255)",
+			"sqlite3":  "VARCHAR(255)",
+		},
+		Pk:       v1.PK_PK_MAN.Enum(),
+		Nullable: proto.Bool(false),
+	}
+)
+var BadgeTable = &v1.SchemaTable{
+	Name: proto.String("tbl_badge"),
+	Columns: []*v1.SchemaColumn{
+		BadgeColumnDef_MemberId,
+		BadgeColumnDef_Label,
+	},
+}
+
+func init() {
+}
+
+type TeamResult struct {
+	Team
+	ts_founded      sql.NullTime
+	fk_parent_id_id any
+}
+
+// Scan reads cols off r, which is satisfied by both *sql.Row and *sql.Rows.
+func (n *TeamResult) Scan(cols []string, r interface{ Scan(dest ...any) error }) error {
+	values := make([]any, len(cols))
+	for i, col := range cols {
+		switch col {
+		case "team_id":
+			values[i] = &n.Id
+		case "team_name":
+			values[i] = &n.Name
+		case "motto":
+			values[i] = &n.Motto
+		case "active":
+			values[i] = &n.Active
+		case "founded":
+			values[i] = &n.ts_founded
+		case "size":
+			values[i] = &n.Size
+		case "score":
+			values[i] = &n.Score
+		case "level":
+			values[i] = &n.Level
+		case "meta":
+			values[i] = &n.Meta
+		case "payload":
+			values[i] = &n.Payload
+		case "parent_id":
+			values[i] = &n.fk_parent_id_id
+		default:
+			return fmt.Errorf("unknown column '%s'", col)
+		}
+	}
+	if err := r.Scan(values...); err != nil {
+		return err
+	}
+	// Left nil when the column is NULL, so an absent timestamp stays absent
+	// rather than becoming the zero instant.
+	if n.ts_founded.Valid {
+		n.Founded = timestamppb.New(n.ts_founded.Time)
+	}
+	return nil
+}
+
+func (n *Team) GetColValue(col string) any {
+	switch col {
+	case "team_id":
+		return n.Id
+	case "team_name":
+		return n.Name
+	case "motto":
+		return n.Motto
+	case "active":
+		return n.Active
+	case "founded":
+		// Handed back as a time.Time, which is what a driver can bind.
+		if n.Founded == nil {
+			return nil
+		}
+		return n.Founded.AsTime()
+	case "size":
+		return n.Size
+	case "score":
+		return n.Score
+	case "level":
+		return n.Level
+	case "meta":
+		return n.Meta
+	case "payload":
+		return n.Payload
+	case "parent_id":
+		return n.Parent
+	default:
+		return nil
+	}
+}
+
+func GetTeamPKColumns() []string {
+	return []string{
+		"team_id",
+	}
+}
+
+func GetTeamColumns() []string {
+	return []string{
+		"team_id",
+		"team_name",
+		"motto",
+		"active",
+		"founded",
+		"size",
+		"score",
+		"level",
+		"meta",
+		"payload",
+		"parent_id",
+	}
+}
+
+type MemberResult struct {
+	Member
+	fk_member_team_id any
+}
+
+// Scan reads cols off r, which is satisfied by both *sql.Row and *sql.Rows.
+func (n *MemberResult) Scan(cols []string, r interface{ Scan(dest ...any) error }) error {
+	values := make([]any, len(cols))
+	for i, col := range cols {
+		switch col {
+		case "member_id":
+			values[i] = &n.Id
+		case "member_team":
+			values[i] = &n.fk_member_team_id
+		default:
+			return fmt.Errorf("unknown column '%s'", col)
+		}
+	}
+	if err := r.Scan(values...); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (n *Member) GetColValue(col string) any {
+	switch col {
+	case "member_id":
+		return n.Id
+	case "member_team":
+		return n.Team
+	default:
+		return nil
+	}
+}
+
+func GetMemberPKColumns() []string {
+	return []string{
+		"member_id",
+	}
+}
+
+func GetMemberColumns() []string {
+	return []string{
+		"member_id",
+		"member_team",
+	}
+}
+
+type BadgeResult struct {
+	Badge
+}
+
+// Scan reads cols off r, which is satisfied by both *sql.Row and *sql.Rows.
+func (n *BadgeResult) Scan(cols []string, r interface{ Scan(dest ...any) error }) error {
+	values := make([]any, len(cols))
+	for i, col := range cols {
+		switch col {
+		case "member_id":
+			values[i] = &n.MemberId
+		case "label":
+			values[i] = &n.Label
+		default:
+			return fmt.Errorf("unknown column '%s'", col)
+		}
+	}
+	if err := r.Scan(values...); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (n *Badge) GetColValue(col string) any {
+	switch col {
+	case "member_id":
+		return n.MemberId
+	case "label":
+		return n.Label
+	default:
+		return nil
+	}
+}
+
+func GetBadgePKColumns() []string {
+	return []string{
+		"member_id",
+		"label",
+	}
+}
+
+func GetBadgeColumns() []string {
+	return []string{
+		"member_id",
+		"label",
+	}
+}
+
+// TeamQueryColumns returns the columns to select for mask. Primary keys
+// are always included, since relations are stitched on them.
+func TeamQueryColumns(m *query.Mask, extra ...string) []string {
+	cols := make([]string, 0, 11+len(extra))
+	cols = append(cols, "team_id")
+	if m.Has("name") {
+		cols = append(cols, "team_name")
+	}
+	if m.Has("motto") {
+		cols = append(cols, "motto")
+	}
+	if m.Has("active") {
+		cols = append(cols, "active")
+	}
+	if m.Has("founded") {
+		cols = append(cols, "founded")
+	}
+	if m.Has("size") {
+		cols = append(cols, "size")
+	}
+	if m.Has("score") {
+		cols = append(cols, "score")
+	}
+	if m.Has("level") {
+		cols = append(cols, "level")
+	}
+	if m.Has("meta") {
+		cols = append(cols, "meta")
+	}
+	if m.Has("payload") {
+		cols = append(cols, "payload")
+	}
+	if m.Has("parent") {
+		cols = append(cols, "parent_id")
+	}
+	for _, e := range extra {
+		if !query.Contains(cols, e) {
+			cols = append(cols, e)
+		}
+	}
+	return cols
+}
+
+// LoadTeamRows selects tbl_team rows matching conds and eagerly
+// loads every relation the mask selects. extra forces columns into the SELECT
+// regardless of the mask, which is how a parent gets the join key back.
+func LoadTeamRows(ctx context.Context, c query.Conn, m *query.Mask, conds []query.Cond, extra ...string) ([]*TeamResult, error) {
+	cols := TeamQueryColumns(m, extra...)
+	sqlRows, err := c.Select(ctx, "tbl_team", cols, conds)
+	if err != nil {
+		return nil, err
+	}
+	defer sqlRows.Close()
+
+	var rows []*TeamResult
+	for sqlRows.Next() {
+		row := new(TeamResult)
+		if err := row.Scan(cols, sqlRows); err != nil {
+			return nil, err
+		}
+		rows = append(rows, row)
+	}
+	if err := sqlRows.Err(); err != nil {
+		return nil, err
+	}
+	if len(rows) == 0 {
+		return rows, nil
+	}
+
+	if m.HasRelation("members") {
+		byKey := make(map[any][]*TeamResult, len(rows))
+		for _, row := range rows {
+			key := query.Key(row.GetId())
+			if key == nil {
+				continue
+			}
+			byKey[key] = append(byKey[key], row)
+		}
+		if cond, ok := query.In("member_team", query.Keys(byKey)); ok {
+			related, err := LoadMemberRows(ctx, c, m.Sub("members"), []query.Cond{cond}, "member_team")
+			if err != nil {
+				return nil, err
+			}
+			for _, rel := range related {
+				for _, row := range byKey[query.Key(rel.fk_member_team_id)] {
+					row.Members = append(row.Members, &rel.Member)
+				}
+			}
+		}
+	}
+
+	if m.HasRelation("parent") {
+		byKey := make(map[any][]*TeamResult, len(rows))
+		for _, row := range rows {
+			key := query.Key(row.fk_parent_id_id)
+			if key == nil {
+				continue
+			}
+			byKey[key] = append(byKey[key], row)
+		}
+		if cond, ok := query.In("team_id", query.Keys(byKey)); ok {
+			related, err := LoadTeamRows(ctx, c, m.Sub("parent"), []query.Cond{cond})
+			if err != nil {
+				return nil, err
+			}
+			for _, rel := range related {
+				for _, row := range byKey[query.Key(rel.GetId())] {
+					row.Parent = &rel.Team
+				}
+			}
+		}
+	}
+
+	return rows, nil
+}
+
+// LoadTeam selects tbl_team rows restricted to the fields mask
+// names. A nil or empty mask selects every column and loads no relations.
+func LoadTeam(ctx context.Context, c query.Conn, mask *fieldmaskpb.FieldMask, conds ...query.Cond) ([]*Team, error) {
+	rows, err := LoadTeamRows(ctx, c, query.FromFieldMask(mask), conds)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]*Team, len(rows))
+	for i, row := range rows {
+		out[i] = &row.Team
+	}
+	return out, nil
+}
+
+// MemberQueryColumns returns the columns to select for mask. Primary keys
+// are always included, since relations are stitched on them.
+func MemberQueryColumns(m *query.Mask, extra ...string) []string {
+	cols := make([]string, 0, 2+len(extra))
+	cols = append(cols, "member_id")
+	if m.Has("team") {
+		cols = append(cols, "member_team")
+	}
+	for _, e := range extra {
+		if !query.Contains(cols, e) {
+			cols = append(cols, e)
+		}
+	}
+	return cols
+}
+
+// LoadMemberRows selects tbl_member rows matching conds and eagerly
+// loads every relation the mask selects. extra forces columns into the SELECT
+// regardless of the mask, which is how a parent gets the join key back.
+func LoadMemberRows(ctx context.Context, c query.Conn, m *query.Mask, conds []query.Cond, extra ...string) ([]*MemberResult, error) {
+	cols := MemberQueryColumns(m, extra...)
+	sqlRows, err := c.Select(ctx, "tbl_member", cols, conds)
+	if err != nil {
+		return nil, err
+	}
+	defer sqlRows.Close()
+
+	var rows []*MemberResult
+	for sqlRows.Next() {
+		row := new(MemberResult)
+		if err := row.Scan(cols, sqlRows); err != nil {
+			return nil, err
+		}
+		rows = append(rows, row)
+	}
+	if err := sqlRows.Err(); err != nil {
+		return nil, err
+	}
+	if len(rows) == 0 {
+		return rows, nil
+	}
+
+	if m.HasRelation("team") {
+		byKey := make(map[any][]*MemberResult, len(rows))
+		for _, row := range rows {
+			key := query.Key(row.fk_member_team_id)
+			if key == nil {
+				continue
+			}
+			byKey[key] = append(byKey[key], row)
+		}
+		if cond, ok := query.In("team_id", query.Keys(byKey)); ok {
+			related, err := LoadTeamRows(ctx, c, m.Sub("team"), []query.Cond{cond})
+			if err != nil {
+				return nil, err
+			}
+			for _, rel := range related {
+				for _, row := range byKey[query.Key(rel.GetId())] {
+					row.Team = &rel.Team
+				}
+			}
+		}
+	}
+
+	return rows, nil
+}
+
+// LoadMember selects tbl_member rows restricted to the fields mask
+// names. A nil or empty mask selects every column and loads no relations.
+func LoadMember(ctx context.Context, c query.Conn, mask *fieldmaskpb.FieldMask, conds ...query.Cond) ([]*Member, error) {
+	rows, err := LoadMemberRows(ctx, c, query.FromFieldMask(mask), conds)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]*Member, len(rows))
+	for i, row := range rows {
+		out[i] = &row.Member
+	}
+	return out, nil
+}
+
+// BadgeQueryColumns returns the columns to select for mask. Primary keys
+// are always included, since relations are stitched on them.
+func BadgeQueryColumns(m *query.Mask, extra ...string) []string {
+	cols := make([]string, 0, 2+len(extra))
+	cols = append(cols, "member_id")
+	cols = append(cols, "label")
+	for _, e := range extra {
+		if !query.Contains(cols, e) {
+			cols = append(cols, e)
+		}
+	}
+	return cols
+}
+
+// LoadBadgeRows selects tbl_badge rows matching conds and eagerly
+// loads every relation the mask selects. extra forces columns into the SELECT
+// regardless of the mask, which is how a parent gets the join key back.
+func LoadBadgeRows(ctx context.Context, c query.Conn, m *query.Mask, conds []query.Cond, extra ...string) ([]*BadgeResult, error) {
+	cols := BadgeQueryColumns(m, extra...)
+	sqlRows, err := c.Select(ctx, "tbl_badge", cols, conds)
+	if err != nil {
+		return nil, err
+	}
+	defer sqlRows.Close()
+
+	var rows []*BadgeResult
+	for sqlRows.Next() {
+		row := new(BadgeResult)
+		if err := row.Scan(cols, sqlRows); err != nil {
+			return nil, err
+		}
+		rows = append(rows, row)
+	}
+	if err := sqlRows.Err(); err != nil {
+		return nil, err
+	}
+	if len(rows) == 0 {
+		return rows, nil
+	}
+
+	return rows, nil
+}
+
+// LoadBadge selects tbl_badge rows restricted to the fields mask
+// names. A nil or empty mask selects every column and loads no relations.
+func LoadBadge(ctx context.Context, c query.Conn, mask *fieldmaskpb.FieldMask, conds ...query.Cond) ([]*Badge, error) {
+	rows, err := LoadBadgeRows(ctx, c, query.FromFieldMask(mask), conds)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]*Badge, len(rows))
+	for i, row := range rows {
+		out[i] = &row.Badge
+	}
+	return out, nil
+}
+
+// TeamFilter declares what filtrify filters and page orders over
+// tbl_team may name: proto field names, mapped to qualified columns.
+// Not filterable:
+//   - score: filtrify has no float kind yet
+//   - level: enums are not supported yet
+//   - meta: JSON column
+//   - payload: embedded message (JSON)
+//   - has(parent, ...): self-referencing relations need table aliases, not supported yet
+var TeamFilter = &sql1.Schema{
+	Columns: map[string]sql1.Column{
+		"id":      {SQL: "tbl_team.team_id", Kind: filter.Int},
+		"name":    {SQL: "tbl_team.team_name", Kind: filter.String},
+		"motto":   {SQL: "tbl_team.motto", Kind: filter.String},
+		"active":  {SQL: "tbl_team.active", Kind: filter.Bool},
+		"founded": {SQL: "tbl_team.founded", Kind: filter.Time},
+		"size":    {SQL: "tbl_team.size", Kind: filter.Int},
+		"parent":  {SQL: "tbl_team.parent_id", Kind: filter.Int},
+	},
+	Sortable: []string{"id", "name", "active", "founded"},
+	Key:      sql1.Column{SQL: "tbl_team.team_id", Kind: filter.Int},
+}
+
+// Relations refer to other tables' schemas, so they are set once all exist.
+func init() {
+	TeamFilter.Relations = map[string]sql1.Relation{
+		"members": {From: "tbl_member", Join: "tbl_member.member_team = tbl_team.team_id", Schema: MemberFilter},
+	}
+}
+
+// MemberFilter declares what filtrify filters and page orders over
+// tbl_member may name: proto field names, mapped to qualified columns.
+var MemberFilter = &sql1.Schema{
+	Columns: map[string]sql1.Column{
+		"id":   {SQL: "tbl_member.member_id", Kind: filter.String},
+		"team": {SQL: "tbl_member.member_team", Kind: filter.Int},
+	},
+	Sortable: []string{"id", "team"},
+	Key:      sql1.Column{SQL: "tbl_member.member_id", Kind: filter.String},
+}
+
+// Relations refer to other tables' schemas, so they are set once all exist.
+func init() {
+	MemberFilter.Relations = map[string]sql1.Relation{
+		"team": {From: "tbl_team", Join: "tbl_team.team_id = tbl_member.member_team", Schema: TeamFilter},
+	}
+}
+
+// BadgeFilter declares what filtrify filters and page orders over
+// tbl_badge may name: proto field names, mapped to qualified columns.
+var BadgeFilter = &sql1.Schema{
+	Columns: map[string]sql1.Column{
+		"member_id": {SQL: "tbl_badge.member_id", Kind: filter.String},
+		"label":     {SQL: "tbl_badge.label", Kind: filter.String},
+	},
+	Sortable: []string{"member_id", "label"},
+}

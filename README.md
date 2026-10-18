@@ -9,7 +9,9 @@
 - **`scanner`** — a `<Message>Result` struct per table with `Scan`, `GetColValue`, and column-list helpers, for reading rows into Go without reflection.
 - **`query`** — FieldMask-aware `Load<Message>`/`Load<Message>Rows` functions that select only requested columns and eagerly load related messages (one batched `IN (...)` per relation, stitched in Go), consumed by [`pkg/query`](pkg/query).
 
-These are independently switchable via the `plugins=` parameter (see below); `schema`, `scanner`, and `query` are the three plugins that exist today.
+- **`filter`** (opt-in) — a `<Message>Filter` per table: a [filtrify](https://github.com/snaerverk/filtrify) `sql.Schema` mapping proto field names to qualified columns, has-many/belongs-to fields to `has()` relations, and declaring the sort columns and key for keyset pages. Turns client filters like `contains(name, "acme") AND has(books, pages > 300)` into a `query.Cond`.
+
+These are independently switchable via the `plugins=` parameter (see below).
 
 ## Install
 
@@ -29,7 +31,7 @@ Optional `plugins=` parameter (comma-separated, protoc-style) selects which of `
 protoc --go-sqlmap_out=plugins=schema+scanner+query,paths=source_relative:. your.proto
 ```
 
-Omit `plugins=` to enable all three. `query` requires `scanner` to also be enabled, since its output calls the scanner's `Result` type. The schema writer emits a `SchemaType` entry for every dialect (mysql/postgres/sqlite3) regardless — the actual dialect is chosen at runtime by `migration.New`, not at generation time.
+Omit `plugins=` to enable `schema`, `scanner` and `query`. `filter` is opt-in (`plugins=schema+scanner+query+filter`), since its output imports `github.com/snaerverk/filtrify`, which your module then needs. `query` requires `scanner` to also be enabled, since its output calls the scanner's `Result` type. The schema writer emits a `SchemaType` entry for every dialect (mysql/postgres/sqlite3) regardless — the actual dialect is chosen at runtime by `migration.New`, not at generation time.
 
 ### buf
 
@@ -121,7 +123,17 @@ authors, err := examplepb.LoadAuthor(ctx, conn,
     &fieldmaskpb.FieldMask{Paths: []string{"name", "books.title"}})
 ```
 
-`LoadAuthor` also takes `...query.Cond` filters (build one with `query.In(col, values)`, which reports whether the value slice was non-empty). For row-level access without eager loading, use `<Message>Result.Scan` directly against `GetAuthorColumns()`/`GetAuthorPKColumns()`.
+`LoadAuthor` also takes `...query.Cond` filters (build one with `query.In(col, values)`, which reports whether the value slice was non-empty).
+
+With the `filter` plugin, a client's filtrify expression becomes such a condition. Only fields the generated schema declares are accepted, and values are always bind parameters:
+
+```go
+expr, err := filter.Parse(ctx, `contains(name, "ann") AND has(books, pages >= 300)`)
+cond, err := examplepb.AuthorFilter.Cond(expr) // filter.ErrInvalid for unknown fields etc.
+authors, err := examplepb.LoadAuthor(ctx, conn, mask, query.Cond(cond))
+```
+
+`AuthorFilter.Page(order, paging, "name")` resolves a keyset page (ORDER BY, the condition after a cursor, cursors for the rows). The generated schema leaves out what filtrify can't compare portably: JSON columns, embedded messages, floats, enums, and self-referencing relations; the generated comment lists each with its reason. Only NOT NULL columns are sortable, and a composite primary key leaves the schema without a page key. For row-level access without eager loading, use `<Message>Result.Scan` directly against `GetAuthorColumns()`/`GetAuthorPKColumns()`.
 
 ## Commands
 
@@ -148,5 +160,6 @@ SQLMAP_E2E=1 go test ./pkg/generator/sqlmap/ -run TestE2E # dockerized-Postgres 
 - [x] Joined-table subtypes (`oneof` enforced as a DB-level FK/CHECK constraint)
 - [x] Multiple dialects: PostgreSQL, MySQL/MariaDB, SQLite
 - [x] Published as a BSR remote plugin (`buf.build/snaerverk/go-sqlmap`)
-- [ ] SQL filters translated at runtime from a [filtrify](https://github.com/snaerverk/filtrify) AST, replacing ad-hoc `query.Cond` construction
+- [x] SQL filters from a [filtrify](https://github.com/snaerverk/filtrify) AST, via the generated `filter` schemas
+- [ ] Paged queries (search + order + cursor + count) as one generated call
 - [ ] Insert/update helpers (currently out of scope; `pkg/migration` only creates schema, `pkg/query` only reads)
