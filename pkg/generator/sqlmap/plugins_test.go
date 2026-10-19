@@ -8,7 +8,7 @@ import (
 )
 
 func TestParseEnabled(t *testing.T) {
-	defaults := map[string]bool{"schema": true, "scanner": true, "query": true, "filter": false}
+	defaults := map[string]bool{"schema": true, "scanner": true, "query": true, "filter": false, "repo": false}
 
 	for _, tc := range []struct {
 		name  string

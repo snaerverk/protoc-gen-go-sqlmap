@@ -9,6 +9,7 @@ import (
 	"github.com/snaerverk/protoc-gen-go-sqlmap/pkg/writer"
 	"github.com/snaerverk/protoc-gen-go-sqlmap/pkg/writer/filter"
 	"github.com/snaerverk/protoc-gen-go-sqlmap/pkg/writer/query"
+	"github.com/snaerverk/protoc-gen-go-sqlmap/pkg/writer/repo"
 	"github.com/snaerverk/protoc-gen-go-sqlmap/pkg/writer/scanner"
 	"github.com/snaerverk/protoc-gen-go-sqlmap/pkg/writer/schema"
 	"google.golang.org/protobuf/compiler/protogen"
@@ -33,6 +34,9 @@ var plugins = []plugin{
 	{Name: "query", New: query.New, Requires: []string{"scanner"}},
 	// Imports github.com/snaerverk/filtrify.
 	{Name: "filter", New: filter.New, OptIn: true},
+	// Repository adapters bundling scanner+query+filter behind one XRepo type.
+	// Imports filtrify and the sqlmap query runtime, so opt-in.
+	{Name: "repo", New: repo.New, Requires: []string{"query", "filter"}, OptIn: true},
 }
 
 type SqlGenerator struct {
