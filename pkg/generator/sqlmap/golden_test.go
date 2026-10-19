@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"google.golang.org/protobuf/compiler/protogen"
@@ -202,6 +203,31 @@ func TestGenerate_Filter(t *testing.T) {
 		t.Fatalf("no filter.sqlmap.go in generated output, got files: %v", fileNames(files))
 	}
 	compareGolden(t, "filter.sqlmap.go", got)
+}
+
+// The repo plugin reuses the filter fixture: it exercises a single-column PK
+// (Team, PK_AUTO int64; Member, PK_MAN string), every sortable kind, and a
+// composite-key table (Badge) that must get no repo.
+func TestGenerate_Repo(t *testing.T) {
+	files := generateWith(t, "filter.proto", "plugins=schema+scanner+query+filter+repo")
+	got, ok := files["filter.sqlmap.go"]
+	if !ok {
+		t.Fatalf("no filter.sqlmap.go in generated output, got files: %v", fileNames(files))
+	}
+	compareGolden(t, "filter.repo.sqlmap.go", got)
+}
+
+// repo imports filtrify and the query runtime, so like filter it must stay
+// opt-in: omitting plugins= must not emit XRepo types.
+func TestGenerate_RepoIsOptIn(t *testing.T) {
+	all := generateWith(t, "filter.proto", "")["filter.sqlmap.go"]
+	if strings.Contains(all, "Repo struct") {
+		t.Error("absent plugins= emitted repo code, but repo is opt-in")
+	}
+	only := generateWith(t, "filter.proto", "plugins=schema+scanner+query+filter+repo")["filter.sqlmap.go"]
+	if !strings.Contains(only, "type TeamRepo struct") {
+		t.Error("plugins=...+repo emitted no repo adapter")
+	}
 }
 
 func fileNames(files map[string]string) []string {
